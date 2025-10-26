@@ -204,17 +204,17 @@ This plan outlines a structured approach to building `DirCrab`, starting with th
 
 
 
-1.  **Concurrency Limiting (`tokio::sync::Semaphore`):**
+1.  ✅ **Concurrency Limiting (`tokio::sync::Semaphore`):**
 
-    *   Introduce a `tokio::sync::Semaphore` with a configurable maximum number of permits.
+    *   ✅ Introduce a `tokio::sync::Semaphore` with a configurable maximum number of permits.
 
-    *   Before spawning each `scan_url` task, acquire a permit from the semaphore.
+    *   ✅ Before spawning each `scan_url` task, acquire a permit from the semaphore.
 
-    *   Ensure the permit is released when the `scan_url` task completes (e.g., using `_permit = semaphore.acquire().await;`).
+    *   ✅ Ensure the permit is released when the `scan_url` task completes (e.g., using `_permit = semaphore.acquire().await;`).
 
-    *   Add a CLI argument for `--concurrency` to set the semaphore limit.
+    *   ✅ Add a CLI argument for `--concurrency` to set the semaphore limit.
 
-    *   **Consideration:** Experiment with different concurrency limits to find an optimal balance between speed and resource usage.
+    *   ✅ **Consideration:** Experiment with different concurrency limits to find an optimal balance between speed and resource usage.
 
 
 
