@@ -218,15 +218,15 @@ This plan outlines a structured approach to building `DirCrab`, starting with th
 
 
 
-2.  **Status Code Filtering:**
+2.  ✅ **Status Code Filtering:**
 
-    *   Add CLI arguments like `--exclude-status <CODES>` and `--include-status <CODES>`.
+    *   ✅ Add CLI arguments like `--exclude-status <CODES>` and `--include-status <CODES>`.
 
-    *   Parse these arguments into a `HashSet<u16>` for efficient lookup.
+    *   ✅ Parse these arguments into a `HashSet<u16>` for efficient lookup.
 
-    *   Modify the response processing logic to filter based on these sets.
+    *   ✅ Modify the response processing logic to filter based on these sets.
 
-    *   **Consideration:** Define clear precedence rules if both `--exclude` and `--include` are used (e.g., `--include` overrides `--exclude`).
+    *   ✅ **Consideration:** Define clear precedence rules if both `--exclude` and `--include` are used (e.g., `--include` overrides `--exclude`).
 
 
 
