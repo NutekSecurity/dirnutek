@@ -1,13 +1,13 @@
+use anyhow::Result;
 use clap::Parser;
+use reqwest::Client;
+use std::collections::HashSet;
 use std::path::PathBuf;
+use std::sync::Arc;
+use std::time::Duration;
 use tokio::fs::File;
 use tokio::io::{self, AsyncBufReadExt, BufReader};
-use anyhow::Result;
-use reqwest::Client;
-use std::time::Duration;
-use tokio::sync::{mpsc, Semaphore};
-use std::sync::Arc;
-use std::collections::HashSet;
+use tokio::sync::{Semaphore, mpsc};
 
 fn parse_status_codes(s: &str) -> Result<HashSet<u16>, String> {
     s.split(',')
@@ -27,12 +27,19 @@ fn wordlist_path_parser(s: &str) -> Result<PathBuf, String> {
     }
 }
 
+fn parse_concurrency(s: &str) -> Result<usize, String> {
+    let concurrency = s
+        .parse::<usize>()
+        .map_err(|e| format!("Invalid concurrency value: {}", e))?;
+    if concurrency == 0 {
+        Err("Concurrency must be at least 1.".to_string())
+    } else {
+        Ok(concurrency)
+    }
+}
+
 #[derive(Parser, Debug)]
-#[clap(
-    author = "Neosb",
-    version,
-    about = "A high-speed web content scanner"
-)]
+#[clap(author = "Neosb", version, about = "A high-speed web content scanner")]
 struct Cli {
     /// The base URL to scan (e.g., `http://testsite.com`)
     #[arg(short, long)]
@@ -43,7 +50,7 @@ struct Cli {
     wordlist: PathBuf,
 
     /// Maximum number of concurrent requests
-    #[arg(short, long, default_value = "50")]
+    #[arg(short, long, default_value = "50", value_parser = parse_concurrency)]
     concurrency: usize,
 
     /// Exclude the following HTTP status codes (comma-separated)
@@ -97,8 +104,19 @@ async fn main() -> Result<()> {
         let exclude_status = cli.exclude_status.clone();
         let include_status = cli.include_status.clone();
         let handle = tokio::spawn(async move {
-            let _permit = semaphore_clone.acquire().await.expect("Failed to acquire semaphore permit");
-            scanner::scan_url(&client, &base_url, &word, tx_clone, &exclude_status, &include_status).await
+            let _permit = semaphore_clone
+                .acquire()
+                .await
+                .expect("Failed to acquire semaphore permit");
+            scanner::scan_url(
+                &client,
+                &base_url,
+                &word,
+                tx_clone,
+                &exclude_status,
+                &include_status,
+            )
+            .await
         });
         handles.push(handle);
     }
