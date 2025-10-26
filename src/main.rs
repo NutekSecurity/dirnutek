@@ -7,6 +7,14 @@ use reqwest::Client;
 use std::time::Duration;
 use tokio::sync::{mpsc, Semaphore};
 use std::sync::Arc;
+use std::collections::HashSet;
+
+fn parse_status_codes(s: &str) -> Result<HashSet<u16>, String> {
+    s.split(',')
+        .map(|s| s.trim().parse::<u16>())
+        .collect::<Result<HashSet<u16>, _>>()
+        .map_err(|e| format!("Invalid status code: {}", e))
+}
 
 mod scanner;
 
@@ -37,6 +45,14 @@ struct Cli {
     /// Maximum number of concurrent requests
     #[arg(short, long, default_value = "50")]
     concurrency: usize,
+
+    /// Exclude the following HTTP status codes (comma-separated)
+    #[arg(long, value_parser = parse_status_codes)]
+    exclude_status: Option<HashSet<u16>>,
+
+    /// Include only the following HTTP status codes (comma-separated)
+    #[arg(long, value_parser = parse_status_codes)]
+    include_status: Option<HashSet<u16>>,
 }
 
 async fn read_wordlist(path: PathBuf) -> Result<Vec<String>, io::Error> {
@@ -78,9 +94,11 @@ async fn main() -> Result<()> {
         let base_url = cli.url.clone();
         let tx_clone = tx.clone();
         let semaphore_clone = semaphore.clone();
+        let exclude_status = cli.exclude_status.clone();
+        let include_status = cli.include_status.clone();
         let handle = tokio::spawn(async move {
             let _permit = semaphore_clone.acquire().await.expect("Failed to acquire semaphore permit");
-            scanner::scan_url(&client, &base_url, &word, tx_clone).await
+            scanner::scan_url(&client, &base_url, &word, tx_clone, &exclude_status, &include_status).await
         });
         handles.push(handle);
     }

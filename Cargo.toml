@@ -2,7 +2,7 @@
 name = "dircrab"
 version = "0.1.0"
 edition = "2024"
-author = "Neosb <neosb@nuteksecurity.com>"
+authors = ["Neosb <neosb@nuteksecurity.com>"]
 
 [dependencies]
 anyhow = "1.0.100"

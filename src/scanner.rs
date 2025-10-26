@@ -1,17 +1,36 @@
 use anyhow::Result;
 use reqwest::Client;
 use tokio::sync::mpsc::Sender;
+use std::collections::HashSet;
 
-pub async fn scan_url(client: &Client, base_url: &url::Url, word: &str, tx: Sender<String>) -> Result<()> {
+pub async fn scan_url(
+    client: &Client,
+    base_url: &url::Url,
+    word: &str,
+    tx: Sender<String>,
+    exclude_status: &Option<HashSet<u16>>,
+    include_status: &Option<HashSet<u16>>,
+) -> Result<()> {
     let mut target_url = base_url.clone();
     target_url.path_segments_mut().map_err(|_| anyhow::anyhow!("cannot be a base"))?.push(word);
 
     let res = client.get(target_url.as_str()).send().await?;
     let status = res.status();
+    let status_code = status.as_u16();
     let url_str = target_url.to_string();
 
-    let output = match status.as_u16() {
-        200 => Some(format!("[{}] {}", status, url_str)),
+    // Filtering logic: include_status takes precedence over exclude_status
+    if let Some(include) = include_status {
+        if !include.contains(&status_code) {
+            return Ok(());
+        }
+    } else if let Some(exclude) = exclude_status {
+        if exclude.contains(&status_code) {
+            return Ok(());
+        }
+    }
+
+    let output = match status_code {
         301 => {
             let redirect_target = res.headers()
                 .get(reqwest::header::LOCATION)
@@ -19,9 +38,7 @@ pub async fn scan_url(client: &Client, base_url: &url::Url, word: &str, tx: Send
                 .unwrap_or("unknown");
             Some(format!("[{}] {} -> {}", status, url_str, redirect_target))
         },
-        403 => Some(format!("[{}] {}", status, url_str)),
-        404 => None, // Ignore 404 Not Found
-        _ => None, // Ignore other status codes for now
+        _ => Some(format!("[{}] {}", status, url_str)),
     };
 
     if let Some(msg) = output {
@@ -53,7 +70,7 @@ mod tests {
         let base_url = url::Url::parse(&server.url("/").to_string()).unwrap();
         let (tx, _rx) = mpsc::channel(1);
 
-        let result = scan_url(&client, &base_url, "test_path", tx).await;
+        let result = scan_url(&client, &base_url, "test_path", tx, &None, &None).await;
         assert!(result.is_ok());
     }
 
@@ -68,7 +85,7 @@ mod tests {
         let base_url = url::Url::parse(&server.url("/").to_string()).unwrap();
         let (tx, _rx) = mpsc::channel(1);
 
-        let result = scan_url(&client, &base_url, "non_existent", tx).await;
+        let result = scan_url(&client, &base_url, "non_existent", tx, &None, &None).await;
         assert!(result.is_ok()); // 404 is a valid HTTP response, not an error in reqwest
     }
     #[tokio::test]
@@ -93,7 +110,7 @@ mod tests {
         let base_url = url::Url::parse(&format!("http://{}", addr)).unwrap();
         let (tx, _rx) = mpsc::channel(1);
 
-        let result = scan_url(&client, &base_url, "timeout", tx).await;
+        let result = scan_url(&client, &base_url, "timeout", tx, &None, &None).await;
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(err.to_string().contains("timeout"));

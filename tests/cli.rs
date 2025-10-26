@@ -125,6 +125,138 @@ fn test_cli_output_formatting() {
     assert!(!stdout_str.contains("[404]"));
 }
 
+#[test]
+fn test_cli_status_code_filtering() {
+    let wordlist_content = "found\nmoved\nforbidden\nnot_found\n";
+    let wordlist_file = create_temp_wordlist(wordlist_content);
+    let wordlist_path = wordlist_file.path().to_str().unwrap();
+
+    // Test --exclude-status
+    let server_exclude = Server::run();
+    server_exclude.expect(
+        Expectation::matching(request::method_path("GET", "/found"))
+            .respond_with(responders::status_code(200)),
+    );
+    server_exclude.expect(
+        Expectation::matching(request::method_path("GET", "/moved"))
+            .respond_with(responders::status_code(301).insert_header("Location", "/new_location")),
+    );
+    server_exclude.expect(
+        Expectation::matching(request::method_path("GET", "/forbidden"))
+            .respond_with(responders::status_code(403)),
+    );
+    server_exclude.expect(
+        Expectation::matching(request::method_path("GET", "/not_found"))
+            .respond_with(responders::status_code(404)),
+    );
+    let server_url_exclude = server_exclude.url("/").to_string();
+
+    let cmd_output_exclude = Command::cargo_bin("dircrab")
+        .expect("Failed to find dircrab binary")
+        .args(&[
+            "-u",
+            &server_url_exclude,
+            "-w",
+            wordlist_path,
+            "--exclude-status",
+            "200,404",
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .stdout.clone();
+
+    let stdout_str_exclude = String::from_utf8_lossy(&cmd_output_exclude);
+    assert!(!stdout_str_exclude.contains("[200 OK]"));
+    assert!(stdout_str_exclude.contains("[301 Moved Permanently]"));
+    assert!(stdout_str_exclude.contains("[403 Forbidden]"));
+    assert!(!stdout_str_exclude.contains("[404 Not Found]"));
+
+    // Test --include-status
+    let server_include = Server::run();
+    server_include.expect(
+        Expectation::matching(request::method_path("GET", "/found"))
+            .respond_with(responders::status_code(200)),
+    );
+    server_include.expect(
+        Expectation::matching(request::method_path("GET", "/moved"))
+            .respond_with(responders::status_code(301).insert_header("Location", "/new_location")),
+    );
+    server_include.expect(
+        Expectation::matching(request::method_path("GET", "/forbidden"))
+            .respond_with(responders::status_code(403)),
+    );
+    server_include.expect(
+        Expectation::matching(request::method_path("GET", "/not_found"))
+            .respond_with(responders::status_code(404)),
+    );
+    let server_url_include = server_include.url("/").to_string();
+
+    let cmd_output_include = Command::cargo_bin("dircrab")
+        .expect("Failed to find dircrab binary")
+        .args(&[
+            "-u",
+            &server_url_include,
+            "-w",
+            wordlist_path,
+            "--include-status",
+            "200,301",
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .stdout.clone();
+
+    let stdout_str_include = String::from_utf8_lossy(&cmd_output_include);
+    assert!(stdout_str_include.contains("[200 OK]"));
+    assert!(stdout_str_include.contains("[301 Moved Permanently]"));
+    assert!(!stdout_str_include.contains("[403 Forbidden]"));
+    assert!(!stdout_str_include.contains("[404 Not Found]"));
+
+    // Test --exclude-status and --include-status (include should override exclude)
+    let server_both = Server::run();
+    server_both.expect(
+        Expectation::matching(request::method_path("GET", "/found"))
+            .respond_with(responders::status_code(200)),
+    );
+    server_both.expect(
+        Expectation::matching(request::method_path("GET", "/moved"))
+            .respond_with(responders::status_code(301).insert_header("Location", "/new_location")),
+    );
+    server_both.expect(
+        Expectation::matching(request::method_path("GET", "/forbidden"))
+            .respond_with(responders::status_code(403)),
+    );
+    server_both.expect(
+        Expectation::matching(request::method_path("GET", "/not_found"))
+            .respond_with(responders::status_code(404)),
+    );
+    let server_url_both = server_both.url("/").to_string();
+
+    let cmd_output_both = Command::cargo_bin("dircrab")
+        .expect("Failed to find dircrab binary")
+        .args(&[
+            "-u",
+            &server_url_both,
+            "-w",
+            wordlist_path,
+            "--exclude-status",
+            "200",
+            "--include-status",
+            "200,403",
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .stdout.clone();
+
+    let stdout_str_both = String::from_utf8_lossy(&cmd_output_both);
+    assert!(stdout_str_both.contains("[200 OK]"));
+    assert!(!stdout_str_both.contains("[301 Moved Permanently]"));
+    assert!(stdout_str_both.contains("[403 Forbidden]"));
+    assert!(!stdout_str_both.contains("[404 Not Found]"));
+}
+
 #[tokio::test]
 async fn test_concurrency_limit() {
     let concurrency_limit = 2;
