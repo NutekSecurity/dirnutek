@@ -2,6 +2,8 @@ use assert_cmd::Command;
 use predicates::prelude::*;
 use std::io::Write;
 use httptest::{Server, matchers::*, responders, Expectation};
+use std::sync::{Arc, atomic::{AtomicUsize, Ordering}};
+use std::time::Duration;
 
 // Helper function to create a temporary wordlist file for tests
 fn create_temp_wordlist(content: &str) -> tempfile::NamedTempFile {
@@ -123,3 +125,56 @@ fn test_cli_output_formatting() {
     assert!(!stdout_str.contains("[404]"));
 }
 
+#[tokio::test]
+async fn test_concurrency_limit() {
+    let concurrency_limit = 2;
+    let num_words = 5;
+    let delay_ms = 100;
+
+    let server = Server::run();
+    let active_requests = Arc::new(AtomicUsize::new(0));
+    let max_active_requests = Arc::new(AtomicUsize::new(0));
+
+    let mut wordlist_content = String::new();
+    for i in 0..num_words {
+        let word = format!("word{}", i);
+        wordlist_content.push_str(&word);
+        wordlist_content.push_str("\n");
+
+        let active_requests_clone = active_requests.clone();
+        let max_active_requests_clone = max_active_requests.clone();
+
+        server.expect(
+            Expectation::matching(request::method_path("GET", format!("/word{}", i)))
+                .respond_with(move || {
+                    let current_active = active_requests_clone.fetch_add(1, Ordering::SeqCst) + 1;
+                    max_active_requests_clone.fetch_max(current_active, Ordering::SeqCst);
+                    
+                    // Simulate work
+                    std::thread::sleep(Duration::from_millis(delay_ms));
+
+                    active_requests_clone.fetch_sub(1, Ordering::SeqCst);
+                    responders::status_code(200)
+                }),
+        );
+    }
+
+    let wordlist_file = create_temp_wordlist(&wordlist_content);
+    let wordlist_path = wordlist_file.path().to_str().unwrap();
+    let server_url = server.url("/").to_string();
+
+    Command::cargo_bin("dircrab")
+        .expect("Failed to find dircrab binary")
+        .args(&[
+            "-u",
+            &server_url,
+            "-w",
+            wordlist_path,
+            "--concurrency",
+            &concurrency_limit.to_string(),
+        ])
+        .assert()
+        .success();
+
+    assert!(max_active_requests.load(Ordering::SeqCst) <= concurrency_limit);
+}

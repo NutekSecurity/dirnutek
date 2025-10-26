@@ -5,6 +5,8 @@ use tokio::io::{self, AsyncBufReadExt, BufReader};
 use anyhow::Result;
 use reqwest::Client;
 use std::time::Duration;
+use tokio::sync::{mpsc, Semaphore};
+use std::sync::Arc;
 
 mod scanner;
 
@@ -31,6 +33,10 @@ struct Cli {
     /// The path to the text file (e.g., `~/wordlists/common.txt`)
     #[arg(short, long, value_parser = wordlist_path_parser)]
     wordlist: PathBuf,
+
+    /// Maximum number of concurrent requests
+    #[arg(short, long, default_value = "50")]
+    concurrency: usize,
 }
 
 async fn read_wordlist(path: PathBuf) -> Result<Vec<String>, io::Error> {
@@ -62,7 +68,8 @@ async fn main() -> Result<()> {
         .redirect(reqwest::redirect::Policy::none())
         .build()?;
 
-    let (tx, mut rx) = tokio::sync::mpsc::channel::<String>(100);
+    let (tx, mut rx) = mpsc::channel::<String>(100);
+    let semaphore = Arc::new(Semaphore::new(cli.concurrency));
 
     let mut handles = Vec::new();
 
@@ -70,7 +77,9 @@ async fn main() -> Result<()> {
         let client = client.clone();
         let base_url = cli.url.clone();
         let tx_clone = tx.clone();
+        let semaphore_clone = semaphore.clone();
         let handle = tokio::spawn(async move {
+            let _permit = semaphore_clone.acquire().await.expect("Failed to acquire semaphore permit");
             scanner::scan_url(&client, &base_url, &word, tx_clone).await
         });
         handles.push(handle);

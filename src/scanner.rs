@@ -27,6 +27,7 @@ pub async fn scan_url(client: &Client, base_url: &url::Url, word: &str, tx: Send
     if let Some(msg) = output {
         tx.send(msg).await?;
     }
+    res.bytes().await?; // Consume the response body to release the connection
 
     Ok(())
 }
