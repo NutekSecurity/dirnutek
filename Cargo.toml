@@ -2,5 +2,17 @@
 name = "dircrab"
 version = "0.1.0"
 edition = "2024"
+author = "Neosb <neosb@nuteksecurity.com>"
 
 [dependencies]
+anyhow = "1.0.100"
+clap = { version = "4.5.50", features = ["derive"] }
+reqwest = { version = "0.12.24", features = ["json", "rustls-tls"] }
+tokio = { version = "1.48.0", features = ["full"] }
+url = "2.5.0"
+
+[dev-dependencies]
+assert_cmd = "2.0.14"
+predicates = "3.1.3"
+tempfile = "3.10.1"
+httptest = "0.16.3"
