@@ -1,5 +1,6 @@
 use anyhow::Result;
 use clap::Parser;
+use regex::Regex;
 use reqwest::Client;
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -8,7 +9,6 @@ use std::time::Duration;
 use tokio::fs::File;
 use tokio::io::{self, AsyncBufReadExt, BufReader};
 use tokio::sync::{Semaphore, mpsc};
-use regex::Regex;
 
 fn parse_status_codes(s: &str) -> Result<HashSet<u16>, String> {
     s.split(',')
@@ -40,7 +40,12 @@ fn parse_concurrency(s: &str) -> Result<usize, String> {
 }
 
 #[derive(Parser, Debug)]
-#[clap(author = "Neosb", version, about = "A high-speed web content scanner")]
+#[clap(
+    author,
+    version,
+    about = "A high-speed web content scanner",
+    help_template = "{about}\n{author-with-newline}\n{usage}\n{all-args}"
+)]
 struct Cli {
     /// The base URL(s) to scan (e.g., `http://testsite.com`). Can be specified multiple times.
     #[arg(short, long, value_name = "URL")]
@@ -121,17 +126,26 @@ async fn main() -> Result<()> {
                     if parsed_url.scheme() == "http" || parsed_url.scheme() == "https" {
                         target_urls_set.insert(parsed_url);
                     } else {
-                        eprintln!("Warning: Unsupported URL scheme for '{}' from file. Only http and https are supported.", trimmed_line);
+                        eprintln!(
+                            "Warning: Unsupported URL scheme for '{}' from file. Only http and https are supported.",
+                            trimmed_line
+                        );
                     }
-                },
-                Err(e) => eprintln!("Warning: Could not parse URL '{}' from file: {}", trimmed_line, e),
+                }
+                Err(e) => eprintln!(
+                    "Warning: Could not parse URL '{}' from file: {}",
+                    trimmed_line, e
+                ),
             }
         }
     }
 
     // Collect URLs from results_file
     if let Some(results_file_path) = cli.results_file {
-        println!("# Extracting URLs from results file: {}", results_file_path.display());
+        println!(
+            "# Extracting URLs from results file: {}",
+            results_file_path.display()
+        );
         let file = File::open(&results_file_path).await?;
         let reader = BufReader::new(file);
         let mut lines = reader.lines();
@@ -149,10 +163,16 @@ async fn main() -> Result<()> {
                         if parsed_url.scheme() == "http" || parsed_url.scheme() == "https" {
                             target_urls_set.insert(parsed_url);
                         } else {
-                            eprintln!("Warning: Unsupported URL scheme for '{}' from results file. Only http and https are supported.", url_str);
+                            eprintln!(
+                                "Warning: Unsupported URL scheme for '{}' from results file. Only http and https are supported.",
+                                url_str
+                            );
                         }
-                    },
-                    Err(e) => eprintln!("Warning: Could not parse URL '{}' from results file: {}", url_str, e),
+                    }
+                    Err(e) => eprintln!(
+                        "Warning: Could not parse URL '{}' from results file: {}",
+                        url_str, e
+                    ),
                 }
             }
         }
@@ -161,7 +181,9 @@ async fn main() -> Result<()> {
     let target_urls: Vec<url::Url> = target_urls_set.into_iter().collect();
 
     if target_urls.is_empty() {
-        eprintln!("Error: No URLs provided for scanning. Use --url, --urls-file, or --results-file.");
+        eprintln!(
+            "Error: No URLs provided for scanning. Use --url, --urls-file, or --results-file."
+        );
         return Ok(());
     }
 
@@ -190,8 +212,8 @@ async fn main() -> Result<()> {
         start_scan(
             client.clone(), // Clone client for each scan
             base_url,
-            words.clone(), // Clone words for each scan
-            tx.clone(),    // Clone sender for each scan
+            words.clone(),     // Clone words for each scan
+            tx.clone(),        // Clone sender for each scan
             semaphore.clone(), // Clone semaphore for each scan
             cli.exclude_status.clone(),
             cli.include_status.clone(),
