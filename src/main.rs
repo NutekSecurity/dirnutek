@@ -8,6 +8,7 @@ use std::time::Duration;
 use tokio::fs::File;
 use tokio::io::{self, AsyncBufReadExt, BufReader};
 use tokio::sync::{Semaphore, mpsc};
+use regex::Regex;
 
 fn parse_status_codes(s: &str) -> Result<HashSet<u16>, String> {
     s.split(',')
@@ -41,9 +42,17 @@ fn parse_concurrency(s: &str) -> Result<usize, String> {
 #[derive(Parser, Debug)]
 #[clap(author = "Neosb", version, about = "A high-speed web content scanner")]
 struct Cli {
-    /// The base URL to scan (e.g., `http://testsite.com`)
-    #[arg(short, long)]
-    url: url::Url,
+    /// The base URL(s) to scan (e.g., `http://testsite.com`). Can be specified multiple times.
+    #[arg(short, long, value_name = "URL")]
+    urls: Vec<url::Url>,
+
+    /// Path to a file containing a list of URLs to scan, one per line.
+    #[arg(long, value_name = "FILE")]
+    urls_file: Option<PathBuf>,
+
+    /// Path to a file containing "own results" from which URLs will be extracted and scanned.
+    #[arg(long, value_name = "FILE")]
+    results_file: Option<PathBuf>,
 
     /// The path to the text file (e.g., `~/wordlists/common.txt`)
     #[arg(short, long, value_parser = wordlist_path_parser)]
@@ -88,7 +97,74 @@ async fn read_wordlist(path: PathBuf) -> Result<Vec<String>, io::Error> {
 async fn main() -> Result<()> {
     let cli = Cli::parse();
 
-    println!("# URL: {}", cli.url);
+    let mut target_urls_set: HashSet<url::Url> = HashSet::new();
+
+    // Collect URLs from direct arguments
+    if !cli.urls.is_empty() {
+        target_urls_set.extend(cli.urls);
+    }
+
+    // Collect URLs from urls_file
+    if let Some(urls_file_path) = cli.urls_file {
+        println!("# Reading URLs from file: {}", urls_file_path.display());
+        let file = File::open(&urls_file_path).await?;
+        let reader = BufReader::new(file);
+        let mut lines = reader.lines();
+
+        while let Some(line) = lines.next_line().await? {
+            let trimmed_line = line.trim();
+            if trimmed_line.is_empty() || trimmed_line.starts_with("#") {
+                continue;
+            }
+            match url::Url::parse(trimmed_line) {
+                Ok(parsed_url) => {
+                    if parsed_url.scheme() == "http" || parsed_url.scheme() == "https" {
+                        target_urls_set.insert(parsed_url);
+                    } else {
+                        eprintln!("Warning: Unsupported URL scheme for '{}' from file. Only http and https are supported.", trimmed_line);
+                    }
+                },
+                Err(e) => eprintln!("Warning: Could not parse URL '{}' from file: {}", trimmed_line, e),
+            }
+        }
+    }
+
+    // Collect URLs from results_file
+    if let Some(results_file_path) = cli.results_file {
+        println!("# Extracting URLs from results file: {}", results_file_path.display());
+        let file = File::open(&results_file_path).await?;
+        let reader = BufReader::new(file);
+        let mut lines = reader.lines();
+        let url_regex = Regex::new(r"https?://[^\s]+").unwrap();
+
+        while let Some(line) = lines.next_line().await? {
+            let trimmed_line = line.trim();
+            if trimmed_line.is_empty() || trimmed_line.starts_with("#") {
+                continue;
+            }
+            for mat in url_regex.find_iter(&trimmed_line) {
+                let url_str = mat.as_str();
+                match url::Url::parse(url_str) {
+                    Ok(parsed_url) => {
+                        if parsed_url.scheme() == "http" || parsed_url.scheme() == "https" {
+                            target_urls_set.insert(parsed_url);
+                        } else {
+                            eprintln!("Warning: Unsupported URL scheme for '{}' from results file. Only http and https are supported.", url_str);
+                        }
+                    },
+                    Err(e) => eprintln!("Warning: Could not parse URL '{}' from results file: {}", url_str, e),
+                }
+            }
+        }
+    }
+
+    let target_urls: Vec<url::Url> = target_urls_set.into_iter().collect();
+
+    if target_urls.is_empty() {
+        eprintln!("Error: No URLs provided for scanning. Use --url, --urls-file, or --results-file.");
+        return Ok(());
+    }
+
     println!("# Wordlist: {}", cli.wordlist.display());
 
     let words = read_wordlist(cli.wordlist).await?;
@@ -109,18 +185,24 @@ async fn main() -> Result<()> {
         }
     });
 
-    start_scan(
-        client,
-        cli.url,
-        words,
-        tx,
-        semaphore,
-        cli.exclude_status,
-        cli.include_status,
-        cli.depth,
-        cli.delay,
-    )
-    .await?;
+    for base_url in target_urls {
+        println!("# Starting scan for URL: {}", base_url);
+        start_scan(
+            client.clone(), // Clone client for each scan
+            base_url,
+            words.clone(), // Clone words for each scan
+            tx.clone(),    // Clone sender for each scan
+            semaphore.clone(), // Clone semaphore for each scan
+            cli.exclude_status.clone(),
+            cli.include_status.clone(),
+            cli.depth,
+            cli.delay,
+        )
+        .await?;
+    }
+
+    // Drop the original tx to signal the printer_handle to finish
+    drop(tx);
 
     // Wait for the printer task to finish
     printer_handle.await?;

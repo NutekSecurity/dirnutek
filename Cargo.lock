@@ -244,6 +244,7 @@ dependencies = [
  "clap",
  "httptest",
  "predicates",
+ "regex",
  "reqwest",
  "tempfile",
  "tokio",

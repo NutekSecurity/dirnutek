@@ -12,6 +12,13 @@ fn create_temp_wordlist(content: &str) -> tempfile::NamedTempFile {
     file
 }
 
+// Helper function to create a temporary file with URLs
+fn create_temp_urls_file(content: &str) -> tempfile::NamedTempFile {
+    let mut file = tempfile::NamedTempFile::new().expect("Failed to create temp urls file");
+    file.write_all(content.as_bytes()).expect("Failed to write to temp urls file");
+    file
+}
+
 #[test]
 fn test_cli_valid_args() {
     let wordlist_file = create_temp_wordlist("word1\nword2\nword3");
@@ -22,7 +29,7 @@ fn test_cli_valid_args() {
         .args(&["-u", "http://example.com", "-w", wordlist_path])
         .assert()
         .success()
-        .stdout(predicate::str::contains("URL: http://example.com/"))
+        .stdout(predicate::str::contains("Starting scan for URL: http://example.com/"))
         .stdout(predicate::str::contains(format!("Wordlist: {}", wordlist_path)))
         .stdout(predicate::str::contains("Read 3 words from wordlist."));
 }
@@ -37,7 +44,7 @@ fn test_cli_invalid_url() {
         .args(&["-u", "not-a-url", "-w", wordlist_path])
         .assert()
         .failure()
-        .stderr(predicate::str::contains("invalid value 'not-a-url' for '--url <URL>'"));
+        .stderr(predicate::str::contains("invalid value 'not-a-url' for '--urls <URL>'"));
 }
 
 #[test]
@@ -108,7 +115,7 @@ fn test_cli_output_formatting() {
         .args(&["-u", &server_url, "-w", wordlist_path])
         .assert()
         .success()
-        .stdout(predicate::str::contains("URL: ".to_owned() + &server_url))
+        .stdout(predicate::str::contains("Starting scan for URL: ".to_owned() + &server_url))
         .stdout(predicate::str::contains(format!("Wordlist: {}", wordlist_path)))
         .stdout(predicate::str::contains("Read 4 words from wordlist."))
         .get_output()
@@ -353,6 +360,361 @@ fn test_cli_delay_option() {
     assert!(duration >= expected_min_duration, "Expected duration {:?} to be at least {:?}", duration, expected_min_duration);
     // Also ensure it's not excessively long, e.g., less than 2x the expected duration
     assert!(duration < expected_min_duration + Duration::from_millis(1000), "Expected duration {:?} to be less than {:?}", duration, expected_min_duration + Duration::from_millis(1000));
+}
+
+#[test]
+fn test_cli_multiple_urls() {
+    let server1 = Server::run();
+    server1.expect(
+        Expectation::matching(request::path("/test1"))
+            .respond_with(responders::status_code(200)),
+    );
+    server1.expect(
+        Expectation::matching(request::path("/test2"))
+            .respond_with(responders::status_code(200)),
+    );
+    let server_url1 = server1.url("/").to_string();
+    println!("Server 1 URL: {}", server_url1);
+
+    let server2 = Server::run();
+    server2.expect(
+        Expectation::matching(request::path("/test1"))
+            .respond_with(responders::status_code(200)),
+    );
+    server2.expect(
+        Expectation::matching(request::path("/test2"))
+            .respond_with(responders::status_code(200)),
+    );
+    let server_url2 = server2.url("/").to_string();
+    println!("Server 2 URL: {}", server_url2);
+
+    let wordlist_file = create_temp_wordlist("test1\ntest2");
+    let wordlist_path = wordlist_file.path().to_str().unwrap();
+
+    let cmd_output = Command::cargo_bin("dircrab")
+        .expect("Failed to find dircrab binary")
+        .args(&[
+            "-u", &server_url1,
+            "-u", &server_url2,
+            "-w", wordlist_path,
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .stdout.clone();
+
+    let stdout_str = String::from_utf8_lossy(&cmd_output);
+
+    assert!(stdout_str.contains(&format!("Starting scan for URL: {}", server_url1)));
+    assert!(stdout_str.contains(&format!("[200 OK] {}test1", server_url1)));
+    assert!(stdout_str.contains(&format!("[200 OK] {}test2", server_url1)));
+    assert!(stdout_str.contains(&format!("Starting scan for URL: {}", server_url2)));
+    assert!(stdout_str.contains(&format!("[200 OK] {}test1", server_url2)));
+    assert!(stdout_str.contains(&format!("[200 OK] {}test2", server_url2)));
+}
+
+#[test]
+fn test_cli_urls_file() {
+    let server1 = Server::run();
+    server1.expect(
+        Expectation::matching(request::path("/file_test1"))
+            .respond_with(responders::status_code(200)),
+    );
+    server1.expect(
+        Expectation::matching(request::path("/file_test2"))
+            .respond_with(responders::status_code(200)),
+    );
+    let server_url1 = server1.url("/").to_string();
+
+    let server2 = Server::run();
+    server2.expect(
+        Expectation::matching(request::path("/file_test1"))
+            .respond_with(responders::status_code(200)),
+    );
+    server2.expect(
+        Expectation::matching(request::path("/file_test2"))
+            .respond_with(responders::status_code(200)),
+    );
+    let server_url2 = server2.url("/").to_string();
+
+    let urls_content = format!("{}\n{}", server_url1, server_url2);
+    let urls_file = create_temp_urls_file(&urls_content);
+    let urls_file_path = urls_file.path().to_str().unwrap();
+
+    let wordlist_file = create_temp_wordlist("file_test1\nfile_test2");
+    let wordlist_path = wordlist_file.path().to_str().unwrap();
+
+    let cmd_output = Command::cargo_bin("dircrab")
+        .expect("Failed to find dircrab binary")
+        .args(&[
+            "--urls-file", urls_file_path,
+            "-w", wordlist_path,
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .stdout.clone();
+
+    let stdout_str = String::from_utf8_lossy(&cmd_output);
+
+    assert!(stdout_str.contains(&format!("Reading URLs from file: {}", urls_file_path)));
+    assert!(stdout_str.contains(&format!("Starting scan for URL: {}", server_url1)));
+    assert!(stdout_str.contains(&format!("[200 OK] {}file_test1", server_url1)));
+    assert!(stdout_str.contains(&format!("[200 OK] {}file_test2", server_url1)));
+    assert!(stdout_str.contains(&format!("Starting scan for URL: {}", server_url2)));
+    assert!(stdout_str.contains(&format!("[200 OK] {}file_test1", server_url2)));
+    assert!(stdout_str.contains(&format!("[200 OK] {}file_test2", server_url2)));
+}
+
+#[test]
+fn test_cli_results_file() {
+    let server1 = Server::run();
+    server1.expect(
+        Expectation::matching(request::path("/result_test1"))
+            .respond_with(responders::status_code(200)),
+    );
+    server1.expect(
+        Expectation::matching(request::path("/result_test2"))
+            .respond_with(responders::status_code(200)),
+    );
+    let server_url1 = server1.url("/").to_string();
+
+    let server2 = Server::run();
+    server2.expect(
+        Expectation::matching(request::path("/result_test1"))
+            .respond_with(responders::status_code(200)),
+    );
+    server2.expect(
+        Expectation::matching(request::path("/result_test2"))
+            .respond_with(responders::status_code(200)),
+    );
+    let server_url2 = server2.url("/").to_string();
+
+    let results_content = format!(
+        "Some text with a URL: {}\nAnother line with no URL.\nAnd here's another: {}\n",
+        server_url1, server_url2
+    );
+    let results_file = create_temp_urls_file(&results_content); // Reusing helper, it's just a file
+    let results_file_path = results_file.path().to_str().unwrap();
+
+    let wordlist_file = create_temp_wordlist("result_test1\nresult_test2");
+    let wordlist_path = wordlist_file.path().to_str().unwrap();
+
+    let cmd_output = Command::cargo_bin("dircrab")
+        .expect("Failed to find dircrab binary")
+        .args(&[
+            "--results-file", results_file_path,
+            "-w", wordlist_path,
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .stdout.clone();
+
+    let stdout_str = String::from_utf8_lossy(&cmd_output);
+
+    assert!(stdout_str.contains(&format!("Extracting URLs from results file: {}", results_file_path)));
+    assert!(stdout_str.contains(&format!("Starting scan for URL: {}", server_url1)));
+    assert!(stdout_str.contains(&format!("[200 OK] {}result_test1", server_url1)));
+    assert!(stdout_str.contains(&format!("[200 OK] {}result_test2", server_url1)));
+    assert!(stdout_str.contains(&format!("Starting scan for URL: {}", server_url2)));
+    assert!(stdout_str.contains(&format!("[200 OK] {}result_test1", server_url2)));
+    assert!(stdout_str.contains(&format!("[200 OK] {}result_test2", server_url2)));
+}
+
+#[test]
+fn test_cli_no_urls_provided() {
+    let wordlist_file = create_temp_wordlist("word");
+    let wordlist_path = wordlist_file.path().to_str().unwrap();
+
+    Command::cargo_bin("dircrab")
+        .expect("Failed to find dircrab binary")
+        .args(&["-w", wordlist_path])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("Error: No URLs provided for scanning. Use --url, --urls-file, or --results-file."));
+}
+
+#[test]
+fn test_cli_combination_urls() {
+    let server1 = Server::run();
+    server1.expect(
+        Expectation::matching(request::path("/combo1"))
+            .respond_with(responders::status_code(200)),
+    );
+    server1.expect(
+        Expectation::matching(request::path("/combo2"))
+            .respond_with(responders::status_code(200)),
+    );
+    server1.expect(
+        Expectation::matching(request::path("/combo3"))
+            .respond_with(responders::status_code(200)),
+    );
+    let server_url1 = server1.url("/").to_string();
+
+    let server2 = Server::run();
+    server2.expect(
+        Expectation::matching(request::path("/combo1"))
+            .respond_with(responders::status_code(200)),
+    );
+    server2.expect(
+        Expectation::matching(request::path("/combo2"))
+            .respond_with(responders::status_code(200)),
+    );
+    server2.expect(
+        Expectation::matching(request::path("/combo3"))
+            .respond_with(responders::status_code(200)),
+    );
+    let server_url2 = server2.url("/").to_string();
+
+    let server3 = Server::run();
+    server3.expect(
+        Expectation::matching(request::path("/combo1"))
+            .respond_with(responders::status_code(200)),
+    );
+    server3.expect(
+        Expectation::matching(request::path("/combo2"))
+            .respond_with(responders::status_code(200)),
+    );
+    server3.expect(
+        Expectation::matching(request::path("/combo3"))
+            .respond_with(responders::status_code(200)),
+    );
+    let server_url3 = server3.url("/").to_string();
+
+    let urls_file_content = format!("{}", server_url2);
+    let urls_file = create_temp_urls_file(&urls_file_content);
+    let urls_file_path = urls_file.path().to_str().unwrap();
+
+    let results_file_content = format!("Found this: {}", server_url3);
+    let results_file = create_temp_urls_file(&results_file_content);
+    let results_file_path = results_file.path().to_str().unwrap();
+
+    let wordlist_file = create_temp_wordlist("combo1\ncombo2\ncombo3");
+    let wordlist_path = wordlist_file.path().to_str().unwrap();
+
+    let cmd_output = Command::cargo_bin("dircrab")
+        .expect("Failed to find dircrab binary")
+        .args(&[
+            "-u", &server_url1,
+            "--urls-file", urls_file_path,
+            "--results-file", results_file_path,
+            "-w", wordlist_path,
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .stdout.clone();
+
+    let stdout_str = String::from_utf8_lossy(&cmd_output);
+
+    assert!(stdout_str.contains(&format!("Starting scan for URL: {}", server_url1)));
+    assert!(stdout_str.contains(&format!("[200 OK] {}combo1", server_url1)));
+    assert!(stdout_str.contains(&format!("[200 OK] {}combo2", server_url1)));
+    assert!(stdout_str.contains(&format!("[200 OK] {}combo3", server_url1)));
+    assert!(stdout_str.contains(&format!("Starting scan for URL: {}", server_url2)));
+    assert!(stdout_str.contains(&format!("[200 OK] {}combo1", server_url2)));
+    assert!(stdout_str.contains(&format!("[200 OK] {}combo2", server_url2)));
+    assert!(stdout_str.contains(&format!("[200 OK] {}combo3", server_url2)));
+    assert!(stdout_str.contains(&format!("Starting scan for URL: {}", server_url3)));
+    assert!(stdout_str.contains(&format!("[200 OK] {}combo1", server_url3)));
+    assert!(stdout_str.contains(&format!("[200 OK] {}combo2", server_url3)));
+    assert!(stdout_str.contains(&format!("[200 OK] {}combo3", server_url3)));
+}
+
+#[test]
+fn test_cli_unsupported_scheme() {
+    let wordlist_file = create_temp_wordlist("word");
+    let wordlist_path = wordlist_file.path().to_str().unwrap();
+
+    let urls_content = "ftp://ftp.example.com\nhttp://example.com";
+    let urls_file = create_temp_urls_file(&urls_content);
+    let urls_file_path = urls_file.path().to_str().unwrap();
+
+    Command::cargo_bin("dircrab")
+        .expect("Failed to find dircrab binary")
+        .args(&[
+            "--urls-file", urls_file_path,
+            "-w", wordlist_path,
+        ])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("Warning: Unsupported URL scheme for 'ftp://ftp.example.com' from file. Only http and https are supported."))
+        .stdout(predicate::str::contains("Starting scan for URL: http://example.com/"));
+}
+
+#[test]
+fn test_cli_urls_file_with_comments() {
+    let server = Server::run();
+    server.expect(
+        Expectation::matching(request::path("/test_url/word"))
+            .respond_with(responders::status_code(200)),
+    );
+    let server_url = server.url("/").to_string();
+
+    let urls_content = format!("# This is a comment\n{}\n# Another comment\nftp://ignored.com\n",
+        server_url.clone() + "test_url"
+    );
+    let urls_file = create_temp_urls_file(&urls_content);
+    let urls_file_path = urls_file.path().to_str().unwrap();
+
+    let wordlist_file = create_temp_wordlist("word");
+    let wordlist_path = wordlist_file.path().to_str().unwrap();
+
+    let cmd_output = Command::cargo_bin("dircrab")
+        .expect("Failed to find dircrab binary")
+        .args(&[
+            "--urls-file", urls_file_path,
+            "-w", wordlist_path,
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .stdout.clone();
+
+    let stdout_str = String::from_utf8_lossy(&cmd_output);
+
+    assert!(stdout_str.contains(&format!("Starting scan for URL: {}", server_url + "test_url")));
+    assert!(!stdout_str.contains("ftp://ignored.com"));
+    assert!(!stdout_str.contains("# This is a comment"));
+}
+
+#[test]
+fn test_cli_results_file_with_comments() {
+    let server = Server::run();
+    server.expect(
+        Expectation::matching(request::path("/test_result/word"))
+            .respond_with(responders::status_code(200)),
+    );
+    let server_url = server.url("/").to_string();
+
+    let results_content = format!(
+        "# This is a comment in results\nFound URL: {}
+# Another comment in results\nInvalid URL: ftp://ignored.com\n",
+        server_url.clone() + "test_result"
+    );
+    let results_file = create_temp_urls_file(&results_content);
+    let results_file_path = results_file.path().to_str().unwrap();
+
+    let wordlist_file = create_temp_wordlist("word");
+    let wordlist_path = wordlist_file.path().to_str().unwrap();
+
+    let cmd_output = Command::cargo_bin("dircrab")
+        .expect("Failed to find dircrab binary")
+        .args(&[
+            "--results-file", results_file_path,
+            "-w", wordlist_path,
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .stdout.clone();
+
+    let stdout_str = String::from_utf8_lossy(&cmd_output);
+
+    assert!(stdout_str.contains(&format!("Starting scan for URL: {}", server_url + "test_result")));
+    assert!(!stdout_str.contains("ftp://ignored.com"));
+    assert!(!stdout_str.contains("# This is a comment in results"));
 }
 
 #[cfg(test)] mod start_scan_tests {
