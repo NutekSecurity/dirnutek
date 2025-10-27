@@ -16,7 +16,7 @@ fn parse_status_codes(s: &str) -> Result<HashSet<u16>, String> {
         .map_err(|e| format!("Invalid status code: {}", e))
 }
 
-mod scanner;
+use dircrab::start_scan;
 
 fn wordlist_path_parser(s: &str) -> Result<PathBuf, String> {
     let path = PathBuf::from(s);
@@ -50,7 +50,7 @@ struct Cli {
     wordlist: PathBuf,
 
     /// Maximum number of concurrent requests
-    #[arg(short, long, default_value = "50", value_parser = parse_concurrency)]
+    #[arg(short, long, default_value = "2", value_parser = parse_concurrency)]
     concurrency: usize,
 
     /// Exclude the following HTTP status codes (comma-separated)
@@ -64,6 +64,10 @@ struct Cli {
     /// Maximum recursion depth for directory scanning (0 for infinite, 1 for no recursion)
     #[arg(long, default_value = "1")]
     depth: usize,
+
+    /// Optional delay between requests in milliseconds
+    #[arg(long)]
+    delay: Option<u64>,
 }
 
 async fn read_wordlist(path: PathBuf) -> Result<Vec<String>, io::Error> {
@@ -105,7 +109,7 @@ async fn main() -> Result<()> {
         }
     });
 
-    scanner::start_scan(
+    start_scan(
         client,
         cli.url,
         words,
@@ -114,6 +118,7 @@ async fn main() -> Result<()> {
         cli.exclude_status,
         cli.include_status,
         cli.depth,
+        cli.delay,
     )
     .await?;
 

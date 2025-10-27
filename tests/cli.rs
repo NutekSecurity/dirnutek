@@ -257,8 +257,7 @@ fn test_cli_status_code_filtering() {
     assert!(!stdout_str_both.contains("[404 Not Found]"));
 }
 
-#[tokio::test]
-async fn test_concurrency_limit() {
+#[tokio::test] async fn test_concurrency_limit() {
     let concurrency_limit = 2;
     let num_words = 5;
     let delay_ms = 100;
@@ -309,4 +308,101 @@ async fn test_concurrency_limit() {
         .success();
 
     assert!(max_active_requests.load(Ordering::SeqCst) <= concurrency_limit);
+}
+
+#[test]
+fn test_cli_delay_option() {
+    let num_words = 3;
+    let delay_ms = 200;
+    let expected_min_duration = Duration::from_millis((num_words * delay_ms) as u64);
+
+    let server = Server::run();
+    let mut wordlist_content = String::new();
+    for i in 0..num_words {
+        let word = format!("word{}", i);
+        wordlist_content.push_str(&word);
+        wordlist_content.push_str("\n");
+        server.expect(
+            Expectation::matching(request::method_path("GET", format!("/word{}", i)))
+                .respond_with(responders::status_code(200)),
+        );
+    }
+
+    let wordlist_file = create_temp_wordlist(&wordlist_content);
+    let wordlist_path = wordlist_file.path().to_str().unwrap();
+    let server_url = server.url("/").to_string();
+
+    let start_time = std::time::Instant::now();
+    Command::cargo_bin("dircrab")
+        .expect("Failed to find dircrab binary")
+        .args(&[
+            "-u",
+            &server_url,
+            "-w",
+            wordlist_path,
+            "--delay",
+            &delay_ms.to_string(),
+            "--concurrency",
+            "1", // Ensure requests are sequential for accurate delay measurement
+        ])
+        .assert()
+        .success();
+    let duration = start_time.elapsed();
+
+    // Allow for some overhead, but ensure the delay is respected
+    assert!(duration >= expected_min_duration, "Expected duration {:?} to be at least {:?}", duration, expected_min_duration);
+    // Also ensure it's not excessively long, e.g., less than 2x the expected duration
+    assert!(duration < expected_min_duration + Duration::from_millis(1000), "Expected duration {:?} to be less than {:?}", duration, expected_min_duration + Duration::from_millis(1000));
+}
+
+#[cfg(test)] mod start_scan_tests {
+    use dircrab::start_scan; // Import start_scan explicitly
+     // Import perform_scan explicitly
+    use httptest::{Server, matchers::*, Expectation};
+    use httptest::responders;
+    use std::time::Duration;
+    use tokio::sync::mpsc;
+    use reqwest::Client;
+    use std::sync::Arc;
+    use tokio::sync::Semaphore;
+    use url::Url;
+
+    #[tokio::test] async fn test_start_scan_no_recursion() {
+        let server = Server::run();
+        server.expect(Expectation::matching(request::method_path("GET", "/admin%2F")).respond_with(responders::status_code(200)));
+        server.expect(Expectation::matching(request::method_path("GET", "/test")).respond_with(responders::status_code(200)));
+        server.expect(Expectation::matching(request::method_path("GET", "/users")).respond_with(responders::status_code(200)));
+
+        let client = Client::builder()
+            .timeout(Duration::from_secs(1))
+            .redirect(reqwest::redirect::Policy::none())
+            .build().unwrap();
+        let base_url = Url::parse(&server.url("/").to_string()).unwrap();
+        let (tx, mut rx) = mpsc::channel(100);
+        let semaphore = Arc::new(Semaphore::new(1));
+        let words = vec!["admin/".to_string(), "test".to_string(), "users".to_string()];
+
+        start_scan(
+            client,
+            base_url,
+            words,
+            tx,
+            semaphore,
+            None,
+            None,
+            1, // max_depth = 1 (no recursion)
+            None, // delay
+        ).await.unwrap();
+
+        let mut received_messages = Vec::new();
+        while let Some(msg) = rx.recv().await {
+            received_messages.push(msg);
+        }
+        println!("Received messages: {:?}", received_messages);
+
+        assert!(received_messages.contains(&format!("[200 OK] {}", server.url("/admin%2F"))));
+        assert!(received_messages.contains(&format!("[200 OK] {}", server.url("/test"))));
+        // Should not contain /admin/users as recursion depth is 1
+        assert!(!received_messages.contains(&format!("[200 OK] {}", server.url("/admin/users"))));
+    }
 }

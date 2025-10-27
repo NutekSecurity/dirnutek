@@ -308,7 +308,7 @@ This plan outlines a structured approach to building `DirCrab`, starting with th
 
 *   **User Experience:** Ensure the CLI is intuitive and the output is clear and actionable.
 
-*   **Rate Limiting:** Be aware that aggressive scanning can trigger rate limits or IP bans on target servers. Consider adding an optional delay between requests.
+*   ✅ **Rate Limiting:** Be aware that aggressive scanning can trigger rate limits or IP bans on target servers. Consider adding an optional delay between requests.
 
 *   **HTTP Methods:** While the MVP focuses on `GET`/`HEAD`, consider adding support for other HTTP methods (e.g., `POST`) as a future enhancement.
 

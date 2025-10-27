@@ -48,7 +48,7 @@ pub async fn perform_scan(
     if let Some(msg) = output {
         tx.send(msg).await?;
     }
-    res.bytes().await?; // Consume the response body to release the connection
+    res.bytes().await?;
 
     // Check if it's a directory
     if status.is_success() && target_url.path().ends_with('/') {
@@ -71,6 +71,7 @@ pub async fn start_scan(
     exclude_status: Option<HashSet<u16>>,
     include_status: Option<HashSet<u16>>,
     max_depth: usize,
+    delay: Option<u64>,
 ) -> Result<()> {
     let visited_urls: Arc<Mutex<HashSet<url::Url>>> = Arc::new(Mutex::new(HashSet::new()));
     let scan_queue: Arc<Mutex<VecDeque<(url::Url, usize)>>> = Arc::new(Mutex::new(VecDeque::new()));
@@ -89,7 +90,8 @@ pub async fn start_scan(
             } else if join_set.is_empty() {
                 // If queue is empty and no active scans, we are done
                 break;
-            } else {
+            }
+            else {
                 // Queue is empty but scans are active, wait for one to complete
                 // This allows new URLs to be added to the queue by other tasks
                 drop(queue); // Release the lock before awaiting
@@ -115,12 +117,17 @@ pub async fn start_scan(
             let word_clone = word.clone();
             let visited_urls_clone = visited_urls.clone();
             let scan_queue_clone = scan_queue.clone();
+            let delay_clone = delay.clone();
 
             join_set.spawn(async move {
                 let _permit = semaphore_clone
                     .acquire()
                     .await
                     .expect("Failed to acquire semaphore permit");
+
+                if let Some(d) = delay_clone {
+                    tokio::time::sleep(tokio::time::Duration::from_millis(d)).await;
+                }
 
                 let result = perform_scan(
                     &client_clone,
@@ -157,7 +164,6 @@ pub async fn start_scan(
 
 #[cfg(test)]
 mod tests {
-    use super::perform_scan; // Import perform_scan explicitly
     use httptest::{Server, matchers::*, Expectation};
     use httptest::responders;
     use std::time::Duration;
@@ -167,6 +173,8 @@ mod tests {
     use reqwest::Client; // Explicit import
     use url::Url; // Explicit import
     use std::collections::HashSet;
+
+    use crate::perform_scan; // Import perform_scan explicitly
 
     #[tokio::test]
     async fn test_perform_scan_success() {
@@ -267,7 +275,8 @@ mod tests {
 
 #[cfg(test)]
 mod start_scan_tests {
-    use super::start_scan; // Import start_scan explicitly
+    use crate::start_scan; // Import start_scan explicitly
+     // Import perform_scan explicitly
     use httptest::{Server, matchers::*, Expectation};
     use httptest::responders;
     use std::time::Duration;
@@ -302,6 +311,7 @@ mod start_scan_tests {
             None,
             None,
             1, // max_depth = 1 (no recursion)
+            None, // delay
         ).await.unwrap();
 
         let mut received_messages = Vec::new();
