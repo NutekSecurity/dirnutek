@@ -230,15 +230,15 @@ This plan outlines a structured approach to building `DirCrab`, starting with th
 
 
 
-3.  **Recursive Scanning:**
+3.  ✅ **Recursive Scanning:**
 
-    *   When a directory is found (e.g., a 200 OK for `/admin/` or a 301 redirect to a directory), add it to a queue of URLs to be scanned.
+    *   ✅ When a directory is found (e.g., a 200 OK for `/admin/` or a 301 redirect to a directory), add it to a queue of URLs to be scanned.
 
-    *   Implement a mechanism to track already scanned URLs to prevent infinite loops.
+    *   ✅ Implement a mechanism to track already scanned URLs to prevent infinite loops.
 
-    *   Add a CLI argument for `--recursive` or `--depth <N>` to control recursion.
+    *   ✅ Add a CLI argument for `--recursive` or `--depth <N>` to control recursion.
 
-    *   **Consideration:** Be mindful of the performance impact of recursive scanning, as it can significantly increase the number of requests. Implement a maximum recursion depth.
+    *   ✅ **Consideration:** Be mindful of the performance impact of recursive scanning, as it can significantly increase the number of requests. Implement a maximum recursion depth.
 
 
 

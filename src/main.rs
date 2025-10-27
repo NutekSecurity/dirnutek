@@ -60,6 +60,10 @@ struct Cli {
     /// Include only the following HTTP status codes (comma-separated)
     #[arg(long, value_parser = parse_status_codes)]
     include_status: Option<HashSet<u16>>,
+
+    /// Maximum recursion depth for directory scanning (0 for infinite, 1 for no recursion)
+    #[arg(long, default_value = "1")]
+    depth: usize,
 }
 
 async fn read_wordlist(path: PathBuf) -> Result<Vec<String>, io::Error> {
@@ -94,36 +98,6 @@ async fn main() -> Result<()> {
     let (tx, mut rx) = mpsc::channel::<String>(100);
     let semaphore = Arc::new(Semaphore::new(cli.concurrency));
 
-    let mut handles = Vec::new();
-
-    for word in words {
-        let client = client.clone();
-        let base_url = cli.url.clone();
-        let tx_clone = tx.clone();
-        let semaphore_clone = semaphore.clone();
-        let exclude_status = cli.exclude_status.clone();
-        let include_status = cli.include_status.clone();
-        let handle = tokio::spawn(async move {
-            let _permit = semaphore_clone
-                .acquire()
-                .await
-                .expect("Failed to acquire semaphore permit");
-            scanner::scan_url(
-                &client,
-                &base_url,
-                &word,
-                tx_clone,
-                &exclude_status,
-                &include_status,
-            )
-            .await
-        });
-        handles.push(handle);
-    }
-
-    // Drop the original tx to signal the receiver that no more messages will be sent
-    drop(tx);
-
     // Spawn a task to receive and print messages
     let printer_handle = tokio::spawn(async move {
         while let Some(msg) = rx.recv().await {
@@ -131,9 +105,17 @@ async fn main() -> Result<()> {
         }
     });
 
-    for handle in handles {
-        handle.await??;
-    }
+    scanner::start_scan(
+        client,
+        cli.url,
+        words,
+        tx,
+        semaphore,
+        cli.exclude_status,
+        cli.include_status,
+        cli.depth,
+    )
+    .await?;
 
     // Wait for the printer task to finish
     printer_handle.await?;
