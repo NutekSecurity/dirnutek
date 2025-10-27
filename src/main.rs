@@ -82,6 +82,10 @@ struct Cli {
     /// Optional delay between requests in milliseconds
     #[arg(long)]
     delay: Option<u64>,
+
+    /// DANGER: Accept invalid TLS certificates (for development/testing only)
+    #[arg(long)]
+    danger_accept_invalid_certs: bool,
 }
 
 async fn read_wordlist(path: PathBuf) -> Result<Vec<String>, io::Error> {
@@ -192,10 +196,15 @@ async fn main() -> Result<()> {
     let words = read_wordlist(cli.wordlist).await?;
     println!("# Read {} words from wordlist.", words.len());
 
-    let client = Client::builder()
+    let mut client_builder = Client::builder()
         .timeout(Duration::from_secs(10)) // 10 second timeout for requests
-        .redirect(reqwest::redirect::Policy::none())
-        .build()?;
+        .redirect(reqwest::redirect::Policy::none());
+
+    if cli.danger_accept_invalid_certs {
+        client_builder = client_builder.danger_accept_invalid_certs(true);
+    }
+
+    let client = client_builder.build()?;
 
     let (tx, mut rx) = mpsc::channel::<String>(100);
     let semaphore = Arc::new(Semaphore::new(cli.concurrency));
