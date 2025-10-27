@@ -8,7 +8,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::fs::File;
 use tokio::io::{self, AsyncBufReadExt, BufReader};
-use tokio::sync::{Semaphore, mpsc};
+use tokio::sync::{Mutex, Semaphore, mpsc};
 
 fn parse_status_codes(s: &str) -> Result<HashSet<u16>, String> {
     s.split(',')
@@ -17,7 +17,7 @@ fn parse_status_codes(s: &str) -> Result<HashSet<u16>, String> {
         .map_err(|e| format!("Invalid status code: {}", e))
 }
 
-use dircrab::{start_scan, HttpMethod};
+use dircrab::{HttpMethod, start_scan};
 
 fn wordlist_path_parser(s: &str) -> Result<PathBuf, String> {
     let path = PathBuf::from(s);
@@ -68,7 +68,7 @@ struct Cli {
     concurrency: usize,
 
     /// HTTP method to use for requests
-    #[arg(long, default_value = "GET", value_enum)]
+    #[arg(long, default_value = "get", value_enum)]
     method: HttpMethod,
 
     /// Exclude the following HTTP status codes (comma-separated)
@@ -94,6 +94,18 @@ struct Cli {
     /// Custom User-Agent header to use for requests
     #[arg(long, default_value = "dircrab/0.1.0")]
     user_agent: String,
+
+    /// Filter: Exact word count in response body
+    #[arg(long)]
+    exact_words: Option<usize>,
+
+    /// Filter: Exact character count in response body
+    #[arg(long)]
+    exact_chars: Option<usize>,
+
+    /// Filter: Exact line count in response body
+    #[arg(long)]
+    exact_lines: Option<usize>,
 }
 
 async fn read_wordlist(path: PathBuf) -> Result<Vec<String>, io::Error> {
@@ -168,7 +180,7 @@ async fn main() -> Result<()> {
             if trimmed_line.is_empty() || trimmed_line.starts_with("#") {
                 continue;
             }
-            for mat in url_regex.find_iter(&trimmed_line) {
+            for mat in url_regex.find_iter(trimmed_line) {
                 let url_str = mat.as_str();
                 match url::Url::parse(url_str) {
                     Ok(parsed_url) => {
@@ -191,8 +203,19 @@ async fn main() -> Result<()> {
     }
 
     let target_urls: Vec<url::Url> = target_urls_set.into_iter().collect();
+    let mut processed_urls = Vec::new();
 
-    if target_urls.is_empty() {
+    for url in target_urls {
+        let mut new_url = url;
+        if !new_url.path().ends_with('/') {
+            let mut path = new_url.path().to_string();
+            path.push('/');
+            new_url.set_path(&path);
+        }
+        processed_urls.push(new_url);
+    }
+
+    if processed_urls.is_empty() {
         eprintln!(
             "Error: No URLs provided for scanning. Use --url, --urls-file, or --results-file."
         );
@@ -217,6 +240,15 @@ async fn main() -> Result<()> {
 
     let (tx, mut rx) = mpsc::channel::<String>(100);
     let semaphore = Arc::new(Semaphore::new(cli.concurrency));
+    let visited_urls: Arc<Mutex<HashSet<url::Url>>> = Arc::new(Mutex::new(HashSet::new()));
+
+    // Add initial target URLs to the globally visited set
+    {
+        let mut visited = visited_urls.lock().await;
+        for url in &processed_urls {
+            visited.insert(url.clone());
+        }
+    }
 
     // Spawn a task to receive and print messages
     let printer_handle = tokio::spawn(async move {
@@ -225,19 +257,23 @@ async fn main() -> Result<()> {
         }
     });
 
-    for base_url in target_urls {
+    for base_url in processed_urls {
         println!("# Starting scan for URL: {}", base_url);
         start_scan(
             client.clone(), // Clone client for each scan
             base_url,
-            words.clone(),     // Clone words for each scan
-            tx.clone(),        // Clone sender for each scan
-            semaphore.clone(), // Clone semaphore for each scan
+            words.clone(),        // Clone words for each scan
+            tx.clone(),           // Clone sender for each scan
+            semaphore.clone(),    // Clone semaphore for each scan
+            visited_urls.clone(), // Pass the shared visited_urls
             cli.method.clone(),
             cli.exclude_status.clone(),
             cli.include_status.clone(),
             cli.depth,
             cli.delay,
+            cli.exact_words,
+            cli.exact_chars,
+            cli.exact_lines,
         )
         .await?;
     }

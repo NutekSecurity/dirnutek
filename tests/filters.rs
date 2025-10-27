@@ -1,0 +1,365 @@
+use dircrab::{HttpMethod, start_scan};
+use httptest::responders;
+use httptest::{Expectation, Server, matchers::*};
+use reqwest::Client;
+use std::collections::HashSet;
+use std::sync::Arc;
+use tokio::sync::mpsc;
+use tokio::sync::{Mutex, Semaphore};
+use url::Url;
+
+#[tokio::test]
+async fn test_filter_by_exact_word_count() {
+    let server = Server::run();
+    server.expect(
+        Expectation::matching(request::method_path("GET", "/three_words"))
+            .respond_with(responders::status_code(200).body("one two three")),
+    );
+    server.expect(
+        Expectation::matching(request::method_path("GET", "/four_words"))
+            .respond_with(responders::status_code(200).body("one two three four")),
+    );
+
+    let client = Client::builder().build().unwrap();
+    let base_url = Url::parse(&server.url("/").to_string()).unwrap();
+    let (tx, mut rx) = mpsc::channel(100);
+    let semaphore = Arc::new(Semaphore::new(1));
+    let words = vec!["three_words".to_string(), "four_words".to_string()];
+    let visited_urls: Arc<Mutex<HashSet<url::Url>>> = Arc::new(Mutex::new(HashSet::new()));
+
+    start_scan(
+        client,
+        base_url,
+        words,
+        tx,
+        semaphore,
+        visited_urls.clone(),
+        HttpMethod::GET,
+        None,
+        None,    // include_status
+        1,
+        None,
+        Some(3), // exact_words
+        None,    // exact_chars
+        None,    // exact_lines
+    )
+    .await
+    .unwrap();
+
+    let mut received_messages = Vec::new();
+    while let Some(msg) = rx.recv().await {
+        received_messages.push(msg);
+    }
+
+    assert!(received_messages.iter().any(|msg| msg.contains("three_words")));
+    assert!(!received_messages.iter().any(|msg| msg.contains("four_words")));
+}
+
+#[tokio::test]
+async fn test_filter_by_exact_word_count_no_match() {
+    let server = Server::run();
+    server.expect(
+        Expectation::matching(request::method_path("GET", "/three_words"))
+            .respond_with(responders::status_code(200).body("one two three")),
+    );
+    server.expect(
+        Expectation::matching(request::method_path("GET", "/four_words"))
+            .respond_with(responders::status_code(200).body("one two three four")),
+    );
+
+    let client = Client::builder().build().unwrap();
+    let base_url = Url::parse(&server.url("/").to_string()).unwrap();
+    let (tx, mut rx) = mpsc::channel(100);
+    let semaphore = Arc::new(Semaphore::new(1));
+    let words = vec!["three_words".to_string(), "four_words".to_string()];
+    let visited_urls: Arc<Mutex<HashSet<url::Url>>> = Arc::new(Mutex::new(HashSet::new()));
+
+    start_scan(
+        client,
+        base_url,
+        words,
+        tx,
+        semaphore,
+        visited_urls.clone(),
+        HttpMethod::GET,
+        None,
+        None,    // include_status
+        1,
+        None,
+        Some(5), // exact_words (no match for 3 or 4 words)
+        None,    // exact_chars
+        None,    // exact_lines
+    )
+    .await
+    .unwrap();
+
+    let mut received_messages = Vec::new();
+    while let Some(msg) = rx.recv().await {
+        received_messages.push(msg);
+    }
+
+    assert!(!received_messages.iter().any(|msg| msg.contains("three_words")));
+    assert!(!received_messages.iter().any(|msg| msg.contains("four_words")));
+}
+
+#[tokio::test]
+async fn test_filter_by_exact_char_count() {
+    let server = Server::run();
+    server.expect(
+        Expectation::matching(request::method_path("GET", "/three_chars"))
+            .respond_with(responders::status_code(200).body("abc")),
+    );
+    server.expect(
+        Expectation::matching(request::method_path("GET", "/four_chars"))
+            .respond_with(responders::status_code(200).body("abcd")),
+    );
+
+    let client = Client::builder().build().unwrap();
+    let base_url = Url::parse(&server.url("/").to_string()).unwrap();
+    let (tx, mut rx) = mpsc::channel(100);
+    let semaphore = Arc::new(Semaphore::new(1));
+    let words = vec!["three_chars".to_string(), "four_chars".to_string()];
+    let visited_urls: Arc<Mutex<HashSet<url::Url>>> = Arc::new(Mutex::new(HashSet::new()));
+
+    start_scan(
+        client,
+        base_url,
+        words,
+        tx,
+        semaphore,
+        visited_urls.clone(),
+        HttpMethod::GET,
+        None,
+        None,    // include_status
+        1,
+        None,
+        None,    // exact_words
+        Some(3), // exact_chars
+        None,    // exact_lines
+    )
+    .await
+    .unwrap();
+
+    let mut received_messages = Vec::new();
+    while let Some(msg) = rx.recv().await {
+        received_messages.push(msg);
+    }
+
+    assert!(received_messages.iter().any(|msg| msg.contains("three_chars")));
+    assert!(!received_messages.iter().any(|msg| msg.contains("four_chars")));
+}
+
+#[tokio::test]
+async fn test_filter_by_exact_char_count_no_match() {
+    let server = Server::run();
+    server.expect(
+        Expectation::matching(request::method_path("GET", "/three_chars"))
+            .respond_with(responders::status_code(200).body("abc")),
+    );
+    server.expect(
+        Expectation::matching(request::method_path("GET", "/four_chars"))
+            .respond_with(responders::status_code(200).body("abcd")),
+    );
+
+    let client = Client::builder().build().unwrap();
+    let base_url = Url::parse(&server.url("/").to_string()).unwrap();
+    let (tx, mut rx) = mpsc::channel(100);
+    let semaphore = Arc::new(Semaphore::new(1));
+    let words = vec!["three_chars".to_string(), "four_chars".to_string()];
+    let visited_urls: Arc<Mutex<HashSet<url::Url>>> = Arc::new(Mutex::new(HashSet::new()));
+
+    start_scan(
+        client,
+        base_url,
+        words,
+        tx,
+        semaphore,
+        visited_urls.clone(),
+        HttpMethod::GET,
+        None,
+        None,    // include_status
+        1,
+        None,
+        None,    // exact_words
+        Some(5), // exact_chars (no match for 3 or 4 chars)
+        None,    // exact_lines
+    )
+    .await
+    .unwrap();
+
+    let mut received_messages = Vec::new();
+    while let Some(msg) = rx.recv().await {
+        received_messages.push(msg);
+    }
+
+    assert!(!received_messages.iter().any(|msg| msg.contains("three_chars")));
+    assert!(!received_messages.iter().any(|msg| msg.contains("four_chars")));
+}
+
+#[tokio::test]
+async fn test_filter_by_exact_line_count() {
+    let server = Server::run();
+    server.expect(
+        Expectation::matching(request::method_path("GET", "/two_lines"))
+            .respond_with(responders::status_code(200).body("line1\nline2")),
+    );
+    server.expect(
+        Expectation::matching(request::method_path("GET", "/three_lines"))
+            .respond_with(responders::status_code(200).body("line1\nline2\nline3")),
+    );
+
+    let client = Client::builder().build().unwrap();
+    let base_url = Url::parse(&server.url("/").to_string()).unwrap();
+    let (tx, mut rx) = mpsc::channel(100);
+    let semaphore = Arc::new(Semaphore::new(1));
+    let words = vec!["two_lines".to_string(), "three_lines".to_string()];
+    let visited_urls: Arc<Mutex<HashSet<url::Url>>> = Arc::new(Mutex::new(HashSet::new()));
+
+    start_scan(
+        client,
+        base_url,
+        words,
+        tx,
+        semaphore,
+        visited_urls.clone(),
+        HttpMethod::GET,
+        None,
+        None,    // include_status
+        1,
+        None,
+        None,    // exact_words
+        None,    // exact_chars
+        Some(2), // exact_lines
+    )
+    .await
+    .unwrap();
+
+    let mut received_messages = Vec::new();
+    while let Some(msg) = rx.recv().await {
+        received_messages.push(msg);
+    }
+
+    assert!(received_messages.iter().any(|msg| msg.contains("two_lines")));
+    assert!(!received_messages.iter().any(|msg| msg.contains("three_lines")));
+}
+
+#[tokio::test]
+async fn test_filter_by_exact_line_count_no_match() {
+    let server = Server::run();
+    server.expect(
+        Expectation::matching(request::method_path("GET", "/two_lines"))
+            .respond_with(responders::status_code(200).body("line1\nline2")),
+    );
+    server.expect(
+        Expectation::matching(request::method_path("GET", "/three_lines"))
+            .respond_with(responders::status_code(200).body("line1\nline2\nline3")),
+    );
+
+    let client = Client::builder().build().unwrap();
+    let base_url = Url::parse(&server.url("/").to_string()).unwrap();
+    let (tx, mut rx) = mpsc::channel(100);
+    let semaphore = Arc::new(Semaphore::new(1));
+    let words = vec!["two_lines".to_string(), "three_lines".to_string()];
+    let visited_urls: Arc<Mutex<HashSet<url::Url>>> = Arc::new(Mutex::new(HashSet::new()));
+
+    start_scan(
+        client,
+        base_url,
+        words,
+        tx,
+        semaphore,
+        visited_urls.clone(),
+        HttpMethod::GET,
+        None,
+        None,    // include_status
+        1,
+        None,
+        None,    // exact_words
+        None,    // exact_chars
+        Some(4), // exact_lines (no match for 2 or 3 lines)
+    )
+    .await
+    .unwrap();
+
+    let mut received_messages = Vec::new();
+    while let Some(msg) = rx.recv().await {
+        received_messages.push(msg);
+    }
+
+    assert!(!received_messages.iter().any(|msg| msg.contains("two_lines")));
+    assert!(!received_messages.iter().any(|msg| msg.contains("three_lines")));
+}
+
+#[tokio::test]
+async fn test_filter_by_exact_combined() {
+    let server = Server::run();
+    server.expect(
+        Expectation::matching(request::method_path("GET", "/match"))
+            .respond_with(responders::status_code(200).body("one two three\nfour five\nsix")),
+    ); // 6 words, 29 chars, 3 lines
+    server.expect(
+        Expectation::matching(request::method_path("GET", "/no_match_words"))
+            .respond_with(responders::status_code(200).body("one")),
+    ); // 1 word
+    server.expect(
+        Expectation::matching(request::method_path("GET", "/no_match_chars"))
+            .respond_with(responders::status_code(200).body("a")),
+    ); // 1 char
+    server.expect(
+        Expectation::matching(request::method_path("GET", "/no_match_lines"))
+            .respond_with(responders::status_code(200).body("line1")),
+    ); // 1 line
+
+    let client = Client::builder().build().unwrap();
+    let base_url = Url::parse(&server.url("/").to_string()).unwrap();
+    let (tx, mut rx) = mpsc::channel(100);
+    let semaphore = Arc::new(Semaphore::new(1));
+    let words = vec![
+        "match".to_string(),
+        "no_match_words".to_string(),
+        "no_match_chars".to_string(),
+        "no_match_lines".to_string(),
+    ];
+    let visited_urls: Arc<Mutex<HashSet<url::Url>>> = Arc::new(Mutex::new(HashSet::new()));
+
+    start_scan(
+        client,
+        base_url,
+        words,
+        tx,
+        semaphore,
+        visited_urls.clone(),
+        HttpMethod::GET,
+        None,
+        None,    // include_status
+        1,
+        None,
+        Some(6), // exact_words
+        Some(27),  // exact_chars
+        Some(3),  // exact_lines
+    )
+    .await
+    .unwrap();
+
+    let mut received_messages = Vec::new();
+    while let Some(msg) = rx.recv().await {
+        received_messages.push(msg);
+    }
+
+    assert!(received_messages.iter().any(|msg| msg.contains("match")));
+    assert!(
+        !received_messages
+            .iter()
+            .any(|msg| msg.contains("no_match_words"))
+    );
+    assert!(
+        !received_messages
+            .iter()
+            .any(|msg| msg.contains("no_match_chars"))
+    );
+    assert!(
+        !received_messages
+            .iter()
+            .any(|msg| msg.contains("no_match_lines"))
+    );
+}

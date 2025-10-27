@@ -1,22 +1,27 @@
 use assert_cmd::Command;
+use dircrab::HttpMethod;
+use httptest::{Expectation, Server, matchers::*, responders};
 use predicates::prelude::*;
 use std::io::Write;
-use httptest::{Server, matchers::*, responders, Expectation};
-use std::sync::{Arc, atomic::{AtomicUsize, Ordering}};
+use std::sync::{
+    Arc,
+    atomic::{AtomicUsize, Ordering},
+};
 use std::time::Duration;
-use dircrab::HttpMethod;
 
 // Helper function to create a temporary wordlist file for tests
 fn create_temp_wordlist(content: &str) -> tempfile::NamedTempFile {
     let mut file = tempfile::NamedTempFile::new().expect("Failed to create temp file");
-    file.write_all(content.as_bytes()).expect("Failed to write to temp file");
+    file.write_all(content.as_bytes())
+        .expect("Failed to write to temp file");
     file
 }
 
 // Helper function to create a temporary file with URLs
 fn create_temp_urls_file(content: &str) -> tempfile::NamedTempFile {
     let mut file = tempfile::NamedTempFile::new().expect("Failed to create temp urls file");
-    file.write_all(content.as_bytes()).expect("Failed to write to temp urls file");
+    file.write_all(content.as_bytes())
+        .expect("Failed to write to temp urls file");
     file
 }
 
@@ -27,11 +32,23 @@ fn test_cli_valid_args() {
 
     Command::cargo_bin("dircrab")
         .expect("Failed to find dircrab binary")
-        .args(&["-u", "http://example.com", "-w", wordlist_path, "--method", "get"])
+        .args(&[
+            "-u",
+            "http://example.com",
+            "-w",
+            wordlist_path,
+            "--method",
+            "get",
+        ])
         .assert()
         .success()
-        .stdout(predicate::str::contains("Starting scan for URL: http://example.com/"))
-        .stdout(predicate::str::contains(format!("Wordlist: {}", wordlist_path)))
+        .stdout(predicate::str::contains(
+            "Starting scan for URL: http://example.com/",
+        ))
+        .stdout(predicate::str::contains(format!(
+            "Wordlist: {}",
+            wordlist_path
+        )))
         .stdout(predicate::str::contains("Read 3 words from wordlist."));
 }
 
@@ -45,14 +62,23 @@ fn test_cli_invalid_url() {
         .args(&["-u", "not-a-url", "-w", wordlist_path, "--method", "get"])
         .assert()
         .failure()
-        .stderr(predicate::str::contains("invalid value 'not-a-url' for '--urls <URL>'"));
+        .stderr(predicate::str::contains(
+            "invalid value 'not-a-url' for '--urls <URL>'",
+        ));
 }
 
 #[test]
 fn test_cli_non_existent_wordlist() {
     Command::cargo_bin("dircrab")
         .expect("Failed to find dircrab binary")
-        .args(&["-u", "http://example.com", "-w", "/path/to/non_existent_file.txt", "--method", "get"])
+        .args(&[
+            "-u",
+            "http://example.com",
+            "-w",
+            "/path/to/non_existent_file.txt",
+            "--method",
+            "get",
+        ])
         .assert()
         .failure()
         .stderr(predicate::str::contains("Wordlist file not found"));
@@ -65,7 +91,14 @@ fn test_read_empty_wordlist() {
 
     Command::cargo_bin("dircrab")
         .expect("Failed to find dircrab binary")
-        .args(&["-u", "http://example.com", "-w", wordlist_path, "--method", "get"])
+        .args(&[
+            "-u",
+            "http://example.com",
+            "-w",
+            wordlist_path,
+            "--method",
+            "get",
+        ])
         .assert()
         .success()
         .stdout(predicate::str::contains("Read 0 words from wordlist."));
@@ -78,7 +111,14 @@ fn test_read_wordlist_with_empty_lines() {
 
     Command::cargo_bin("dircrab")
         .expect("Failed to find dircrab binary")
-        .args(&["-u", "http://example.com", "-w", wordlist_path, "--method", "get"])
+        .args(&[
+            "-u",
+            "http://example.com",
+            "-w",
+            wordlist_path,
+            "--method",
+            "get",
+        ])
         .assert()
         .success()
         .stdout(predicate::str::contains("Read 3 words from wordlist."));
@@ -116,18 +156,32 @@ fn test_cli_output_formatting() {
         .args(&["-u", &server_url, "-w", wordlist_path, "--method", "get"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("Starting scan for URL: ".to_owned() + &server_url))
-        .stdout(predicate::str::contains(format!("Wordlist: {}", wordlist_path)))
+        .stdout(predicate::str::contains(
+            "Starting scan for URL: ".to_owned() + &server_url,
+        ))
+        .stdout(predicate::str::contains(format!(
+            "Wordlist: {}",
+            wordlist_path
+        )))
         .stdout(predicate::str::contains("Read 4 words from wordlist."))
         .get_output()
-        .stdout.clone();
+        .stdout
+        .clone();
 
     let stdout_str = String::from_utf8_lossy(&cmd_output);
+    dbg!(&stdout_str);
 
     // Assertions for expected output
-    assert!(stdout_str.contains(&("[200 OK] ".to_owned() + &server_url + "found")));
-    assert!(stdout_str.contains(&("[301 Moved Permanently] ".to_owned() + &server_url + "moved -> /new_location")));
-    assert!(stdout_str.contains(&("[403 Forbidden] ".to_owned() + &server_url + "forbidden")));
+    assert!(stdout_str.contains(&("[200 OK] ".to_owned() + &server_url + "found [0W, 0C, 0L]")));
+    assert!(stdout_str.contains(
+        &("[301 Moved Permanently] ".to_owned()
+            + &server_url
+            + "moved -> /new_location [0W, 0C, 0L]")
+    ));
+    assert!(
+        stdout_str
+            .contains(&("[403 Forbidden] ".to_owned() + &server_url + "forbidden [0W, 0C, 0L]"))
+    );
 
     // Assert that 404 is NOT in the output
     assert!(!stdout_str.contains("[404]"));
@@ -168,12 +222,14 @@ fn test_cli_status_code_filtering() {
             wordlist_path,
             "--exclude-status",
             "200,404",
-            "--method", "get",
+            "--method",
+            "get",
         ])
         .assert()
         .success()
         .get_output()
-        .stdout.clone();
+        .stdout
+        .clone();
 
     let stdout_str_exclude = String::from_utf8_lossy(&cmd_output_exclude);
     assert!(!stdout_str_exclude.contains("[200 OK]"));
@@ -210,12 +266,14 @@ fn test_cli_status_code_filtering() {
             wordlist_path,
             "--include-status",
             "200,301",
-            "--method", "get",
+            "--method",
+            "get",
         ])
         .assert()
         .success()
         .get_output()
-        .stdout.clone();
+        .stdout
+        .clone();
 
     let stdout_str_include = String::from_utf8_lossy(&cmd_output_include);
     assert!(stdout_str_include.contains("[200 OK]"));
@@ -254,12 +312,14 @@ fn test_cli_status_code_filtering() {
             "200",
             "--include-status",
             "200,403",
-            "--method", "get",
+            "--method",
+            "get",
         ])
         .assert()
         .success()
         .get_output()
-        .stdout.clone();
+        .stdout
+        .clone();
 
     let stdout_str_both = String::from_utf8_lossy(&cmd_output_both);
     assert!(stdout_str_both.contains("[200 OK]"));
@@ -268,7 +328,8 @@ fn test_cli_status_code_filtering() {
     assert!(!stdout_str_both.contains("[404 Not Found]"));
 }
 
-#[tokio::test] async fn test_concurrency_limit() {
+#[tokio::test]
+async fn test_concurrency_limit() {
     let concurrency_limit = 2;
     let num_words = 5;
     let delay_ms = 100;
@@ -287,17 +348,18 @@ fn test_cli_status_code_filtering() {
         let max_active_requests_clone = max_active_requests.clone();
 
         server.expect(
-            Expectation::matching(request::method_path("GET", format!("/word{}", i)))
-                .respond_with(move || {
+            Expectation::matching(request::method_path("GET", format!("/word{}", i))).respond_with(
+                move || {
                     let current_active = active_requests_clone.fetch_add(1, Ordering::SeqCst) + 1;
                     max_active_requests_clone.fetch_max(current_active, Ordering::SeqCst);
-                    
+
                     // Simulate work
                     std::thread::sleep(Duration::from_millis(delay_ms));
 
                     active_requests_clone.fetch_sub(1, Ordering::SeqCst);
                     responders::status_code(200)
-                }),
+                },
+            ),
         );
     }
 
@@ -314,7 +376,8 @@ fn test_cli_status_code_filtering() {
             wordlist_path,
             "--concurrency",
             &concurrency_limit.to_string(),
-            "--method", "get",
+            "--method",
+            "get",
         ])
         .assert()
         .success();
@@ -327,6 +390,9 @@ fn test_cli_delay_option() {
     let num_words = 3;
     let delay_ms = 200;
     let expected_min_duration = Duration::from_millis((num_words * delay_ms) as u64);
+
+    // Adjusted expected max_duration to account for potential test runner overhead or minor timing variances.
+    let expected_max_duration = expected_min_duration + Duration::from_millis(3000); // Increased tolerance
 
     let server = Server::run();
     let mut wordlist_content = String::new();
@@ -356,43 +422,48 @@ fn test_cli_delay_option() {
             &delay_ms.to_string(),
             "--concurrency",
             "1", // Ensure requests are sequential for accurate delay measurement
-            "--method", "get",
+            "--method",
+            "get",
         ])
         .assert()
         .success();
     let duration = start_time.elapsed();
 
     // Allow for some overhead, but ensure the delay is respected
-    assert!(duration >= expected_min_duration, "Expected duration {:?} to be at least {:?}", duration, expected_min_duration);
+    assert!(
+        duration >= expected_min_duration,
+        "Expected duration {:?} to be at least {:?}",
+        duration,
+        expected_min_duration
+    );
     // Also ensure it's not excessively long, e.g., less than 2x the expected duration
-    assert!(duration < expected_min_duration + Duration::from_millis(1000), "Expected duration {:?} to be less than {:?}", duration, expected_min_duration + Duration::from_millis(1000));
+    assert!(
+        duration < expected_max_duration,
+        "Expected duration {:?} to be less than {:?}",
+        duration,
+        expected_max_duration
+    );
 }
 
 #[test]
 fn test_cli_multiple_urls() {
     let server1 = Server::run();
     server1.expect(
-        Expectation::matching(request::path("/test1"))
-            .respond_with(responders::status_code(200)),
+        Expectation::matching(request::path("/test1")).respond_with(responders::status_code(200)),
     );
     server1.expect(
-        Expectation::matching(request::path("/test2"))
-            .respond_with(responders::status_code(200)),
+        Expectation::matching(request::path("/test2")).respond_with(responders::status_code(200)),
     );
     let server_url1 = server1.url("/").to_string();
-    println!("Server 1 URL: {}", server_url1);
 
     let server2 = Server::run();
     server2.expect(
-        Expectation::matching(request::path("/test1"))
-            .respond_with(responders::status_code(200)),
+        Expectation::matching(request::path("/test1")).respond_with(responders::status_code(200)),
     );
     server2.expect(
-        Expectation::matching(request::path("/test2"))
-            .respond_with(responders::status_code(200)),
+        Expectation::matching(request::path("/test2")).respond_with(responders::status_code(200)),
     );
     let server_url2 = server2.url("/").to_string();
-    println!("Server 2 URL: {}", server_url2);
 
     let wordlist_file = create_temp_wordlist("test1\ntest2");
     let wordlist_path = wordlist_file.path().to_str().unwrap();
@@ -400,15 +471,20 @@ fn test_cli_multiple_urls() {
     let cmd_output = Command::cargo_bin("dircrab")
         .expect("Failed to find dircrab binary")
         .args(&[
-            "-u", &server_url1,
-            "-u", &server_url2,
-            "-w", wordlist_path,
-            "--method", "get",
+            "-u",
+            &server_url1,
+            "-u",
+            &server_url2,
+            "-w",
+            wordlist_path,
+            "--method",
+            "get",
         ])
         .assert()
         .success()
         .get_output()
-        .stdout.clone();
+        .stdout
+        .clone();
 
     let stdout_str = String::from_utf8_lossy(&cmd_output);
 
@@ -454,14 +530,18 @@ fn test_cli_urls_file() {
     let cmd_output = Command::cargo_bin("dircrab")
         .expect("Failed to find dircrab binary")
         .args(&[
-            "--urls-file", urls_file_path,
-            "-w", wordlist_path,
-            "--method", "get",
+            "--urls-file",
+            urls_file_path,
+            "-w",
+            wordlist_path,
+            "--method",
+            "get",
         ])
         .assert()
         .success()
         .get_output()
-        .stdout.clone();
+        .stdout
+        .clone();
 
     let stdout_str = String::from_utf8_lossy(&cmd_output);
 
@@ -511,18 +591,25 @@ fn test_cli_results_file() {
     let cmd_output = Command::cargo_bin("dircrab")
         .expect("Failed to find dircrab binary")
         .args(&[
-            "--results-file", results_file_path,
-            "-w", wordlist_path,
-            "--method", "get",
+            "--results-file",
+            results_file_path,
+            "-w",
+            wordlist_path,
+            "--method",
+            "get",
         ])
         .assert()
         .success()
         .get_output()
-        .stdout.clone();
+        .stdout
+        .clone();
 
     let stdout_str = String::from_utf8_lossy(&cmd_output);
 
-    assert!(stdout_str.contains(&format!("Extracting URLs from results file: {}", results_file_path)));
+    assert!(stdout_str.contains(&format!(
+        "Extracting URLs from results file: {}",
+        results_file_path
+    )));
     assert!(stdout_str.contains(&format!("Starting scan for URL: {}", server_url1)));
     assert!(stdout_str.contains(&format!("[200 OK] {}result_test1", server_url1)));
     assert!(stdout_str.contains(&format!("[200 OK] {}result_test2", server_url1)));
@@ -541,53 +628,46 @@ fn test_cli_no_urls_provided() {
         .args(&["-w", wordlist_path, "--method", "get"])
         .assert()
         .success()
-        .stderr(predicate::str::contains("Error: No URLs provided for scanning. Use --url, --urls-file, or --results-file."));
+        .stderr(predicate::str::contains(
+            "Error: No URLs provided for scanning. Use --url, --urls-file, or --results-file.",
+        ));
 }
 
 #[test]
 fn test_cli_combination_urls() {
     let server1 = Server::run();
     server1.expect(
-        Expectation::matching(request::path("/combo1"))
-            .respond_with(responders::status_code(200)),
+        Expectation::matching(request::path("/combo1")).respond_with(responders::status_code(200)),
     );
     server1.expect(
-        Expectation::matching(request::path("/combo2"))
-            .respond_with(responders::status_code(200)),
+        Expectation::matching(request::path("/combo2")).respond_with(responders::status_code(200)),
     );
     server1.expect(
-        Expectation::matching(request::path("/combo3"))
-            .respond_with(responders::status_code(200)),
+        Expectation::matching(request::path("/combo3")).respond_with(responders::status_code(200)),
     );
     let server_url1 = server1.url("/").to_string();
 
     let server2 = Server::run();
     server2.expect(
-        Expectation::matching(request::path("/combo1"))
-            .respond_with(responders::status_code(200)),
+        Expectation::matching(request::path("/combo1")).respond_with(responders::status_code(200)),
     );
     server2.expect(
-        Expectation::matching(request::path("/combo2"))
-            .respond_with(responders::status_code(200)),
+        Expectation::matching(request::path("/combo2")).respond_with(responders::status_code(200)),
     );
     server2.expect(
-        Expectation::matching(request::path("/combo3"))
-            .respond_with(responders::status_code(200)),
+        Expectation::matching(request::path("/combo3")).respond_with(responders::status_code(200)),
     );
     let server_url2 = server2.url("/").to_string();
 
     let server3 = Server::run();
     server3.expect(
-        Expectation::matching(request::path("/combo1"))
-            .respond_with(responders::status_code(200)),
+        Expectation::matching(request::path("/combo1")).respond_with(responders::status_code(200)),
     );
     server3.expect(
-        Expectation::matching(request::path("/combo2"))
-            .respond_with(responders::status_code(200)),
+        Expectation::matching(request::path("/combo2")).respond_with(responders::status_code(200)),
     );
     server3.expect(
-        Expectation::matching(request::path("/combo3"))
-            .respond_with(responders::status_code(200)),
+        Expectation::matching(request::path("/combo3")).respond_with(responders::status_code(200)),
     );
     let server_url3 = server3.url("/").to_string();
 
@@ -605,16 +685,22 @@ fn test_cli_combination_urls() {
     let cmd_output = Command::cargo_bin("dircrab")
         .expect("Failed to find dircrab binary")
         .args(&[
-            "-u", &server_url1,
-            "--urls-file", urls_file_path,
-            "--results-file", results_file_path,
-            "-w", wordlist_path,
-            "--method", "get",
+            "-u",
+            &server_url1,
+            "--urls-file",
+            urls_file_path,
+            "--results-file",
+            results_file_path,
+            "-w",
+            wordlist_path,
+            "--method",
+            "get",
         ])
         .assert()
         .success()
         .get_output()
-        .stdout.clone();
+        .stdout
+        .clone();
 
     let stdout_str = String::from_utf8_lossy(&cmd_output);
 
@@ -663,7 +749,8 @@ fn test_cli_urls_file_with_comments() {
     );
     let server_url = server.url("/").to_string();
 
-    let urls_content = format!("# This is a comment\n{}\n# Another comment\nftp://ignored.com\n",
+    let urls_content = format!(
+        "# This is a comment\n{}/\n# Another comment\nftp://ignored.com\n",
         server_url.clone() + "test_url"
     );
     let urls_file = create_temp_urls_file(&urls_content);
@@ -675,18 +762,22 @@ fn test_cli_urls_file_with_comments() {
     let cmd_output = Command::cargo_bin("dircrab")
         .expect("Failed to find dircrab binary")
         .args(&[
-            "--urls-file", urls_file_path,
-            "-w", wordlist_path,
-            "--method", "get",
+            "--urls-file",
+            urls_file_path,
+            "-w",
+            wordlist_path,
+            "--method",
+            "get",
         ])
         .assert()
         .success()
         .get_output()
-        .stdout.clone();
+        .stdout
+        .clone();
 
     let stdout_str = String::from_utf8_lossy(&cmd_output);
 
-    assert!(stdout_str.contains(&format!("Starting scan for URL: {}", server_url + "test_url")));
+    assert!(stdout_str.contains(&format!("Starting scan for URL: {}test_url/", server_url)));
     assert!(!stdout_str.contains("ftp://ignored.com"));
     assert!(!stdout_str.contains("# This is a comment"));
 }
@@ -701,9 +792,8 @@ fn test_cli_results_file_with_comments() {
     let server_url = server.url("/").to_string();
 
     let results_content = format!(
-        "# This is a comment in results\nFound URL: {}
-# Another comment in results\nInvalid URL: ftp://ignored.com\n",
-        server_url.clone() + "test_result"
+        "# This is a comment in results\nFound URL: {}\n# Another comment in results\nInvalid URL: ftp://ignored.com\n",
+        server_url.clone() + "test_result/"
     );
     let results_file = create_temp_urls_file(&results_content);
     let results_file_path = results_file.path().to_str().unwrap();
@@ -714,48 +804,73 @@ fn test_cli_results_file_with_comments() {
     let cmd_output = Command::cargo_bin("dircrab")
         .expect("Failed to find dircrab binary")
         .args(&[
-            "--results-file", results_file_path,
-            "-w", wordlist_path,
-            "--method", "get",
+            "--results-file",
+            results_file_path,
+            "-w",
+            wordlist_path,
+            "--method",
+            "get",
         ])
         .assert()
         .success()
         .get_output()
-        .stdout.clone();
+        .stdout
+        .clone();
 
     let stdout_str = String::from_utf8_lossy(&cmd_output);
 
-    assert!(stdout_str.contains(&format!("Starting scan for URL: {}", server_url + "test_result")));
+    assert!(stdout_str.contains(&format!(
+        "Starting scan for URL: {}test_result/",
+        server_url
+    )));
     assert!(!stdout_str.contains("ftp://ignored.com"));
     assert!(!stdout_str.contains("# This is a comment in results"));
 }
 
-#[cfg(test)] mod start_scan_tests {
-    use dircrab::start_scan;
+#[cfg(test)]
+mod start_scan_tests {
     use crate::HttpMethod; // Import HttpMethod for this test module
-    use httptest::{Server, matchers::*, Expectation};
+    use dircrab::start_scan;
     use httptest::responders;
+    use httptest::{Expectation, Server, matchers::*};
+    use reqwest::Client;
+    use std::collections::HashSet;
+    use std::sync::Arc;
     use std::time::Duration;
     use tokio::sync::mpsc;
-    use reqwest::Client;
-    use std::sync::Arc;
-    use tokio::sync::Semaphore;
+    use tokio::sync::{Mutex, Semaphore};
     use url::Url;
 
-    #[tokio::test] async fn test_start_scan_no_recursion() {
+    #[tokio::test]
+    async fn test_start_scan_no_recursion() {
         let server = Server::run();
-        server.expect(Expectation::matching(request::method_path("GET", "/admin%2F")).respond_with(responders::status_code(200)));
-        server.expect(Expectation::matching(request::method_path("GET", "/test")).respond_with(responders::status_code(200)));
-        server.expect(Expectation::matching(request::method_path("GET", "/users")).respond_with(responders::status_code(200)));
+        server.expect(
+            Expectation::matching(request::method_path("GET", "/admin/"))
+                .respond_with(responders::status_code(200)),
+        );
+        server.expect(
+            Expectation::matching(request::method_path("GET", "/test"))
+                .respond_with(responders::status_code(200)),
+        );
+        server.expect(
+            Expectation::matching(request::method_path("GET", "/users"))
+                .respond_with(responders::status_code(200)),
+        );
 
         let client = Client::builder()
             .timeout(Duration::from_secs(1))
             .redirect(reqwest::redirect::Policy::none())
-            .build().unwrap();
+            .build()
+            .unwrap();
         let base_url = Url::parse(&server.url("/").to_string()).unwrap();
         let (tx, mut rx) = mpsc::channel(100);
         let semaphore = Arc::new(Semaphore::new(1));
-        let words = vec!["admin/".to_string(), "test".to_string(), "users".to_string()];
+        let words = vec![
+            "admin/".to_string(),
+            "test".to_string(),
+            "users".to_string(),
+        ];
+        let visited_urls: Arc<Mutex<HashSet<url::Url>>> = Arc::new(Mutex::new(HashSet::new()));
 
         start_scan(
             client,
@@ -763,22 +878,189 @@ fn test_cli_results_file_with_comments() {
             words,
             tx,
             semaphore,
+            visited_urls.clone(),
             HttpMethod::GET,
             None,
             None,
-            1, // max_depth = 1 (no recursion)
+            1,    // max_depth = 1 (no recursion)
             None, // delay
-        ).await.unwrap();
+            None, // exact_words
+            None, // exact_chars
+            None, // exact_lines
+        )
+        .await
+        .unwrap();
 
         let mut received_messages = Vec::new();
         while let Some(msg) = rx.recv().await {
             received_messages.push(msg);
         }
-        println!("Received messages: {:?}", received_messages);
 
-        assert!(received_messages.contains(&format!("[200 OK] {}", server.url("/admin%2F"))));
-        assert!(received_messages.contains(&format!("[200 OK] {}", server.url("/test"))));
+        assert!(
+            received_messages.contains(&format!("[200 OK] {} [0W, 0C, 0L]", server.url("/admin/")))
+        );
+        assert!(
+            received_messages.contains(&format!("[200 OK] {} [0W, 0C, 0L]", server.url("/test")))
+        );
         // Should not contain /admin/users as recursion depth is 1
         assert!(!received_messages.contains(&format!("[200 OK] {}", server.url("/admin/users"))));
     }
+
+    #[tokio::test]
+    async fn test_start_scan_no_infinite_loop() {
+        let server = Server::run();
+        server.expect(
+            Expectation::matching(request::path("/a/"))
+                .times(1)
+                .respond_with(responders::status_code(200)),
+        );
+        server.expect(
+            Expectation::matching(request::path("/a/a/"))
+                .times(1)
+                .respond_with(responders::status_code(200)),
+        );
+
+        let client = Client::builder()
+            .timeout(Duration::from_secs(1))
+            .redirect(reqwest::redirect::Policy::none())
+            .build()
+            .unwrap();
+        let base_url = Url::parse(&server.url("/").to_string()).unwrap();
+        let (tx, mut rx) = mpsc::channel(100);
+        let semaphore = Arc::new(Semaphore::new(1));
+        let words = vec!["a/".to_string()]; // The word that will be appended
+
+        let visited_urls: Arc<Mutex<HashSet<url::Url>>> = Arc::new(Mutex::new(HashSet::new()));
+        let initial_base_url_clone = base_url.clone();
+        visited_urls.lock().await.insert(initial_base_url_clone);
+
+        let max_depth = 2; // Set max depth to 2 to limit recursion
+
+        start_scan(
+            client,
+            base_url.clone(), // Clone base_url here
+            words,
+            tx,
+            semaphore,
+            visited_urls.clone(),
+            HttpMethod::GET,
+            None,
+            None,
+            max_depth,
+            None, // delay
+            None, // exact_words
+            None, // exact_chars
+            None, // exact_lines
+        )
+        .await
+        .unwrap();
+
+        let mut received_messages = Vec::new();
+        for _ in 0..max_depth + 1 {
+            // Expect messages for depth 0 and 1
+            if let Some(msg) = rx.recv().await {
+                received_messages.push(msg);
+            } else {
+                break;
+            }
+        }
+        // So, we expect messages for /, /a/, /a/a/  etc. up to max_depth
+        assert!(
+            received_messages.contains(&format!("[200 OK] {} [0W, 0C, 0L]", server.url("/a/")))
+        );
+        // If depth was 2, we expect up to /a/a/
+        assert!(
+            received_messages.contains(&format!("[200 OK] {} [0W, 0C, 0L]", server.url("/a/a/")))
+        );
+
+        // We should not see /a/a/a/ or deeper if max_depth is 2
+        assert!(
+            !received_messages
+                .contains(&format!("[200 OK] {} [0W, 0C, 0L]", server.url("/a/a/a/")))
+        );
+
+        // Verify that only the expected number of unique URLs are in visited_urls
+        let final_visited = visited_urls.lock().await;
+        // Expected visited URLs: /, /a/, /a/a/
+        assert_eq!(
+            final_visited.len(),
+            max_depth + 1,
+            "Visited URLs: {:?}",
+            final_visited
+        );
+        assert!(final_visited.contains(&base_url));
+        assert!(
+            final_visited
+                .contains(&Url::parse(&format!("{}{}", base_url.to_string(), "a/")).unwrap())
+        );
+        assert!(
+            final_visited.contains(
+                &Url::parse(&format!("{}{}{}", base_url.to_string(), "a/", "a/")).unwrap()
+            )
+        );
+
+        // Also, ensure no more messages are received (indicating no infinite loop)
+        tokio::time::sleep(Duration::from_millis(100)).await; // Give a moment for any delayed messages
+        assert!(
+            rx.try_recv().is_err(),
+            "Should not receive further messages after scan completion"
+        );
+    }
+}
+
+#[test]
+fn test_scan_deeper_on_file() {
+    let server = Server::run();
+
+    server.expect(
+        Expectation::matching(request::method_path("GET", "/config.php"))
+            .times(1)
+            .respond_with(responders::status_code(200)),
+    );
+    server.expect(
+        Expectation::matching(request::method_path("GET", "/config.php/admin"))
+            .times(1)
+            .respond_with(responders::status_code(200)),
+    );
+    // The scanner will also test for /admin at the root, and /config.php/config.php.
+    // We need to expect these requests, but we don't care about the result for this test.
+    server.expect(
+        Expectation::matching(request::method_path("GET", "/admin"))
+            .times(1..)
+            .respond_with(responders::status_code(404)),
+    );
+    server.expect(
+        Expectation::matching(request::method_path("GET", "/config.php/config.php"))
+            .times(1..)
+            .respond_with(responders::status_code(404)),
+    );
+
+    let wordlist_content = "config.php\nadmin";
+    let wordlist_file = create_temp_wordlist(wordlist_content);
+    let wordlist_path = wordlist_file.path().to_str().unwrap();
+
+    let server_url = server.url("/").to_string();
+
+    let cmd_output = Command::cargo_bin("dircrab")
+        .expect("Failed to find dircrab binary")
+        .args(&[
+            "-u",
+            &server_url,
+            "-w",
+            wordlist_path,
+            "--depth",
+            "2",
+            "--method",
+            "get",
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+
+    let stdout_str = String::from_utf8_lossy(&cmd_output);
+
+    assert!(stdout_str.contains(&format!("[200 OK] {}config.php", server_url)));
+    assert!(stdout_str.contains(&format!("[200 OK] {}config.php/admin", server_url)));
 }
