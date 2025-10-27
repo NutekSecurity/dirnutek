@@ -17,7 +17,7 @@ fn parse_status_codes(s: &str) -> Result<HashSet<u16>, String> {
         .map_err(|e| format!("Invalid status code: {}", e))
 }
 
-use dircrab::start_scan;
+use dircrab::{start_scan, HttpMethod};
 
 fn wordlist_path_parser(s: &str) -> Result<PathBuf, String> {
     let path = PathBuf::from(s);
@@ -67,6 +67,10 @@ struct Cli {
     #[arg(short, long, default_value = "2", value_parser = parse_concurrency)]
     concurrency: usize,
 
+    /// HTTP method to use for requests
+    #[arg(long, default_value = "GET", value_enum)]
+    method: HttpMethod,
+
     /// Exclude the following HTTP status codes (comma-separated)
     #[arg(long, value_parser = parse_status_codes)]
     exclude_status: Option<HashSet<u16>>,
@@ -86,6 +90,10 @@ struct Cli {
     /// DANGER: Accept invalid TLS certificates (for development/testing only)
     #[arg(long)]
     danger_accept_invalid_certs: bool,
+
+    /// Custom User-Agent header to use for requests
+    #[arg(long, default_value = "dircrab/0.1.0")]
+    user_agent: String,
 }
 
 async fn read_wordlist(path: PathBuf) -> Result<Vec<String>, io::Error> {
@@ -198,7 +206,8 @@ async fn main() -> Result<()> {
 
     let mut client_builder = Client::builder()
         .timeout(Duration::from_secs(10)) // 10 second timeout for requests
-        .redirect(reqwest::redirect::Policy::none());
+        .redirect(reqwest::redirect::Policy::none())
+        .user_agent(cli.user_agent);
 
     if cli.danger_accept_invalid_certs {
         client_builder = client_builder.danger_accept_invalid_certs(true);
@@ -224,6 +233,7 @@ async fn main() -> Result<()> {
             words.clone(),     // Clone words for each scan
             tx.clone(),        // Clone sender for each scan
             semaphore.clone(), // Clone semaphore for each scan
+            cli.method.clone(),
             cli.exclude_status.clone(),
             cli.include_status.clone(),
             cli.depth,

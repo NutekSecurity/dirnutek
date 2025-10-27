@@ -310,10 +310,10 @@ This plan outlines a structured approach to building `DirCrab`, starting with th
 
 *   ✅ **Rate Limiting:** Be aware that aggressive scanning can trigger rate limits or IP bans on target servers. Consider adding an optional delay between requests.
 
-*   **HTTP Methods:** While the MVP focuses on `GET`/`HEAD`, consider adding support for other HTTP methods (e.g., `POST`) as a future enhancement.
+*   ✅ **HTTP Methods:** While the MVP focuses on `GET`/`HEAD`, consider adding support for other HTTP methods (e.g., `POST`) as a future enhancement.
 
-*   **User-Agent:** Set a custom User-Agent header to identify your scanner.
+*   ✅ **User-Agent:** Set a custom User-Agent header to identify your scanner.
 
-*   **SSL/TLS:** `reqwest` handles this by default, but be aware of potential issues with self-signed certificates or older TLS versions.
+*   ✅ **SSL/TLS:** `reqwest` handles this by default, but be aware of potential issues with self-signed certificates or older TLS versions.
 
 This plan provides a roadmap for building `DirCrab`. Remember to iterate, test frequently, and enjoy the process of mastering asynchronous Rust!

@@ -4,6 +4,7 @@ use std::io::Write;
 use httptest::{Server, matchers::*, responders, Expectation};
 use std::sync::{Arc, atomic::{AtomicUsize, Ordering}};
 use std::time::Duration;
+use dircrab::HttpMethod;
 
 // Helper function to create a temporary wordlist file for tests
 fn create_temp_wordlist(content: &str) -> tempfile::NamedTempFile {
@@ -26,7 +27,7 @@ fn test_cli_valid_args() {
 
     Command::cargo_bin("dircrab")
         .expect("Failed to find dircrab binary")
-        .args(&["-u", "http://example.com", "-w", wordlist_path])
+        .args(&["-u", "http://example.com", "-w", wordlist_path, "--method", "get"])
         .assert()
         .success()
         .stdout(predicate::str::contains("Starting scan for URL: http://example.com/"))
@@ -41,7 +42,7 @@ fn test_cli_invalid_url() {
 
     Command::cargo_bin("dircrab")
         .expect("Failed to find dircrab binary")
-        .args(&["-u", "not-a-url", "-w", wordlist_path])
+        .args(&["-u", "not-a-url", "-w", wordlist_path, "--method", "get"])
         .assert()
         .failure()
         .stderr(predicate::str::contains("invalid value 'not-a-url' for '--urls <URL>'"));
@@ -51,7 +52,7 @@ fn test_cli_invalid_url() {
 fn test_cli_non_existent_wordlist() {
     Command::cargo_bin("dircrab")
         .expect("Failed to find dircrab binary")
-        .args(&["-u", "http://example.com", "-w", "/path/to/non_existent_file.txt"])
+        .args(&["-u", "http://example.com", "-w", "/path/to/non_existent_file.txt", "--method", "get"])
         .assert()
         .failure()
         .stderr(predicate::str::contains("Wordlist file not found"));
@@ -64,7 +65,7 @@ fn test_read_empty_wordlist() {
 
     Command::cargo_bin("dircrab")
         .expect("Failed to find dircrab binary")
-        .args(&["-u", "http://example.com", "-w", wordlist_path])
+        .args(&["-u", "http://example.com", "-w", wordlist_path, "--method", "get"])
         .assert()
         .success()
         .stdout(predicate::str::contains("Read 0 words from wordlist."));
@@ -77,7 +78,7 @@ fn test_read_wordlist_with_empty_lines() {
 
     Command::cargo_bin("dircrab")
         .expect("Failed to find dircrab binary")
-        .args(&["-u", "http://example.com", "-w", wordlist_path])
+        .args(&["-u", "http://example.com", "-w", wordlist_path, "--method", "get"])
         .assert()
         .success()
         .stdout(predicate::str::contains("Read 3 words from wordlist."));
@@ -112,7 +113,7 @@ fn test_cli_output_formatting() {
 
     let cmd_output = Command::cargo_bin("dircrab")
         .expect("Failed to find dircrab binary")
-        .args(&["-u", &server_url, "-w", wordlist_path])
+        .args(&["-u", &server_url, "-w", wordlist_path, "--method", "get"])
         .assert()
         .success()
         .stdout(predicate::str::contains("Starting scan for URL: ".to_owned() + &server_url))
@@ -167,6 +168,7 @@ fn test_cli_status_code_filtering() {
             wordlist_path,
             "--exclude-status",
             "200,404",
+            "--method", "get",
         ])
         .assert()
         .success()
@@ -208,6 +210,7 @@ fn test_cli_status_code_filtering() {
             wordlist_path,
             "--include-status",
             "200,301",
+            "--method", "get",
         ])
         .assert()
         .success()
@@ -251,6 +254,7 @@ fn test_cli_status_code_filtering() {
             "200",
             "--include-status",
             "200,403",
+            "--method", "get",
         ])
         .assert()
         .success()
@@ -310,6 +314,7 @@ fn test_cli_status_code_filtering() {
             wordlist_path,
             "--concurrency",
             &concurrency_limit.to_string(),
+            "--method", "get",
         ])
         .assert()
         .success();
@@ -351,6 +356,7 @@ fn test_cli_delay_option() {
             &delay_ms.to_string(),
             "--concurrency",
             "1", // Ensure requests are sequential for accurate delay measurement
+            "--method", "get",
         ])
         .assert()
         .success();
@@ -397,6 +403,7 @@ fn test_cli_multiple_urls() {
             "-u", &server_url1,
             "-u", &server_url2,
             "-w", wordlist_path,
+            "--method", "get",
         ])
         .assert()
         .success()
@@ -449,6 +456,7 @@ fn test_cli_urls_file() {
         .args(&[
             "--urls-file", urls_file_path,
             "-w", wordlist_path,
+            "--method", "get",
         ])
         .assert()
         .success()
@@ -505,6 +513,7 @@ fn test_cli_results_file() {
         .args(&[
             "--results-file", results_file_path,
             "-w", wordlist_path,
+            "--method", "get",
         ])
         .assert()
         .success()
@@ -529,7 +538,7 @@ fn test_cli_no_urls_provided() {
 
     Command::cargo_bin("dircrab")
         .expect("Failed to find dircrab binary")
-        .args(&["-w", wordlist_path])
+        .args(&["-w", wordlist_path, "--method", "get"])
         .assert()
         .success()
         .stderr(predicate::str::contains("Error: No URLs provided for scanning. Use --url, --urls-file, or --results-file."));
@@ -600,6 +609,7 @@ fn test_cli_combination_urls() {
             "--urls-file", urls_file_path,
             "--results-file", results_file_path,
             "-w", wordlist_path,
+            "--method", "get",
         ])
         .assert()
         .success()
@@ -636,6 +646,7 @@ fn test_cli_unsupported_scheme() {
         .args(&[
             "--urls-file", urls_file_path,
             "-w", wordlist_path,
+            "--method", "get",
         ])
         .assert()
         .success()
@@ -666,6 +677,7 @@ fn test_cli_urls_file_with_comments() {
         .args(&[
             "--urls-file", urls_file_path,
             "-w", wordlist_path,
+            "--method", "get",
         ])
         .assert()
         .success()
@@ -704,6 +716,7 @@ fn test_cli_results_file_with_comments() {
         .args(&[
             "--results-file", results_file_path,
             "-w", wordlist_path,
+            "--method", "get",
         ])
         .assert()
         .success()
@@ -718,8 +731,8 @@ fn test_cli_results_file_with_comments() {
 }
 
 #[cfg(test)] mod start_scan_tests {
-    use dircrab::start_scan; // Import start_scan explicitly
-     // Import perform_scan explicitly
+    use dircrab::start_scan;
+    use crate::HttpMethod; // Import HttpMethod for this test module
     use httptest::{Server, matchers::*, Expectation};
     use httptest::responders;
     use std::time::Duration;
@@ -750,6 +763,7 @@ fn test_cli_results_file_with_comments() {
             words,
             tx,
             semaphore,
+            HttpMethod::GET,
             None,
             None,
             1, // max_depth = 1 (no recursion)

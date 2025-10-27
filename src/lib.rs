@@ -4,19 +4,40 @@ use tokio::sync::{mpsc::Sender, Semaphore, Mutex};
 use std::collections::{HashSet, VecDeque};
 use std::sync::Arc;
 use tokio::task::JoinSet;
+use clap::ValueEnum;
+
+#[derive(Debug, Clone, ValueEnum)]
+pub enum HttpMethod {
+    GET,
+    POST,
+    PUT,
+    DELETE,
+    HEAD,
+    OPTIONS,
+    PATCH,
+}
 
 pub async fn perform_scan(
     client: &Client,
     base_url: &url::Url,
     word: &str,
     tx: Sender<String>,
+    http_method: &HttpMethod,
     exclude_status: &Option<HashSet<u16>>,
     include_status: &Option<HashSet<u16>>,
 ) -> Result<Option<url::Url>> {
     let mut target_url = base_url.clone();
     target_url.path_segments_mut().map_err(|_| anyhow::anyhow!("cannot be a base"))?.push(word);
 
-    let res = client.get(target_url.as_str()).send().await?;
+    let res = match http_method {
+        HttpMethod::GET => client.get(target_url.as_str()).send().await?,
+        HttpMethod::POST => client.post(target_url.as_str()).send().await?,
+        HttpMethod::PUT => client.put(target_url.as_str()).send().await?,
+        HttpMethod::DELETE => client.delete(target_url.as_str()).send().await?,
+        HttpMethod::HEAD => client.head(target_url.as_str()).send().await?,
+        HttpMethod::OPTIONS => client.request(reqwest::Method::OPTIONS, target_url.as_str()).send().await?,
+        HttpMethod::PATCH => client.patch(target_url.as_str()).send().await?,
+    };
     let status = res.status();
     let status_code = status.as_u16();
     let url_str = target_url.to_string();
@@ -68,6 +89,7 @@ pub async fn start_scan(
     words: Vec<String>,
     tx: Sender<String>,
     semaphore: Arc<Semaphore>,
+    http_method: HttpMethod,
     exclude_status: Option<HashSet<u16>>,
     include_status: Option<HashSet<u16>>,
     max_depth: usize,
@@ -118,6 +140,7 @@ pub async fn start_scan(
             let visited_urls_clone = visited_urls.clone();
             let scan_queue_clone = scan_queue.clone();
             let delay_clone = delay.clone();
+            let http_method_clone = http_method.clone();
 
             join_set.spawn(async move {
                 let _permit = semaphore_clone
@@ -134,6 +157,7 @@ pub async fn start_scan(
                     &current_url_clone,
                     &word_clone,
                     tx_clone,
+                    &http_method_clone,
                     &exclude_status_clone,
                     &include_status_clone,
                 )
@@ -174,7 +198,7 @@ mod tests {
     use url::Url; // Explicit import
     use std::collections::HashSet;
 
-    use crate::perform_scan; // Import perform_scan explicitly
+    use crate::{perform_scan, HttpMethod}; // Import perform_scan explicitly
 
     #[tokio::test]
     async fn test_perform_scan_success() {
@@ -187,7 +211,7 @@ mod tests {
         let base_url = Url::parse(&server.url("/").to_string()).unwrap();
         let (tx, _rx) = mpsc::channel(1);
 
-        let result = perform_scan(&client, &base_url, "test_path", tx, &None, &None).await;
+        let result = perform_scan(&client, &base_url, "test_path", tx, &HttpMethod::GET, &None, &None).await;
         assert!(result.is_ok());
     }
 
@@ -202,7 +226,7 @@ mod tests {
         let base_url = Url::parse(&server.url("/").to_string()).unwrap();
         let (tx, _rx) = mpsc::channel(1);
 
-        let result = perform_scan(&client, &base_url, "non_existent", tx, &None, &None).await;
+        let result = perform_scan(&client, &base_url, "non_existent", tx, &HttpMethod::GET, &None, &None).await;
         assert!(result.is_ok()); // 404 is a valid HTTP response, not an error in reqwest
     }
     #[tokio::test]
@@ -227,7 +251,7 @@ mod tests {
         let base_url = Url::parse(&format!("http://{}", addr)).unwrap();
         let (tx, _rx) = mpsc::channel(1);
 
-        let result = perform_scan(&client, &base_url, "timeout", tx, &None, &None).await;
+        let result = perform_scan(&client, &base_url, "timeout", tx, &HttpMethod::GET, &None, &None).await;
         assert!(result.is_err());
         let _err = result.unwrap_err(); // Fixed unused variable warning
     }
@@ -245,7 +269,7 @@ mod tests {
         let mut include_status = HashSet::new();
         include_status.insert(404);
 
-        let result = perform_scan(&client, &base_url, "not_found", tx, &None, &Some(include_status)).await;
+        let result = perform_scan(&client, &base_url, "not_found", tx, &HttpMethod::GET, &None, &Some(include_status)).await;
         assert!(result.is_ok());
 
         // Ensure a message was sent for the 404 status
@@ -264,7 +288,7 @@ mod tests {
         let base_url = Url::parse(&server.url("/").to_string()).unwrap();
         let (tx, mut rx) = mpsc::channel(1);
 
-        let result = perform_scan(&client, &base_url, "not_found", tx, &None, &None).await;
+        let result = perform_scan(&client, &base_url, "not_found", tx, &HttpMethod::GET, &None, &None).await;
         assert!(result.is_ok());
 
         // Ensure no message was sent for the 404 status
@@ -275,7 +299,7 @@ mod tests {
 
 #[cfg(test)]
 mod start_scan_tests {
-    use crate::start_scan; // Import start_scan explicitly
+    use crate::{start_scan, HttpMethod}; // Import start_scan explicitly
      // Import perform_scan explicitly
     use httptest::{Server, matchers::*, Expectation};
     use httptest::responders;
@@ -308,6 +332,7 @@ mod start_scan_tests {
             words,
             tx,
             semaphore,
+            HttpMethod::GET,
             None,
             None,
             1, // max_depth = 1 (no recursion)
