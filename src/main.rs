@@ -84,11 +84,11 @@ async fn read_wordlist(path: PathBuf) -> Result<Vec<String>, io::Error> {
 async fn main() -> Result<()> {
     let cli = Cli::parse();
 
-    println!("URL: {}", cli.url);
-    println!("Wordlist: {}", cli.wordlist.display());
+    println!("# URL: {}", cli.url);
+    println!("# Wordlist: {}", cli.wordlist.display());
 
     let words = read_wordlist(cli.wordlist).await?;
-    println!("Read {} words from wordlist.", words.len());
+    println!("# Read {} words from wordlist.", words.len());
 
     let client = Client::builder()
         .timeout(Duration::from_secs(10)) // 10 second timeout for requests
