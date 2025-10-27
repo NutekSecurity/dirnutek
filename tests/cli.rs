@@ -880,13 +880,16 @@ mod start_scan_tests {
             semaphore,
             visited_urls.clone(),
             HttpMethod::GET,
-            None,
-            None,
+            None, // exclude_status
+            None, // include_status
             1,    // max_depth = 1 (no recursion)
             None, // delay
             None, // exact_words
             None, // exact_chars
             None, // exact_lines
+            None, // exclude_exact_words
+            None, // exclude_exact_chars
+            None, // exclude_exact_lines
         )
         .await
         .unwrap();
@@ -944,13 +947,16 @@ mod start_scan_tests {
             semaphore,
             visited_urls.clone(),
             HttpMethod::GET,
-            None,
-            None,
-            max_depth,
+            None, // exclude_status
+            None, // include_status
+            max_depth, // max_depth
             None, // delay
             None, // exact_words
             None, // exact_chars
             None, // exact_lines
+            None, // exclude_exact_words
+            None, // exclude_exact_chars
+            None, // exclude_exact_lines
         )
         .await
         .unwrap();

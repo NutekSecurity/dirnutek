@@ -95,17 +95,29 @@ struct Cli {
     #[arg(long, default_value = "dircrab/0.1.0")]
     user_agent: String,
 
-    /// Filter: Exact word count in response body
-    #[arg(long)]
-    exact_words: Option<usize>,
+    /// Filter: Exact word count(s) in response body (comma-separated)
+    #[arg(long, value_delimiter = ',')]
+    exact_words: Option<Vec<usize>>,
 
-    /// Filter: Exact character count in response body
-    #[arg(long)]
-    exact_chars: Option<usize>,
+    /// Filter: Exact character count(s) in response body (comma-separated)
+    #[arg(long, value_delimiter = ',')]
+    exact_chars: Option<Vec<usize>>,
 
-    /// Filter: Exact line count in response body
-    #[arg(long)]
-    exact_lines: Option<usize>,
+    /// Filter: Exact line count(s) in response body (comma-separated)
+    #[arg(long, value_delimiter = ',')]
+    exact_lines: Option<Vec<usize>>,
+
+    /// Filter: Exclude exact word count(s) in response body (comma-separated)
+    #[arg(long, value_delimiter = ',')]
+    exclude_exact_words: Option<Vec<usize>>,
+
+    /// Filter: Exclude exact character count(s) in response body (comma-separated)
+    #[arg(long, value_delimiter = ',')]
+    exclude_exact_chars: Option<Vec<usize>>,
+
+    /// Filter: Exclude exact line count(s) in response body (comma-separated)
+    #[arg(long, value_delimiter = ',')]
+    exclude_exact_lines: Option<Vec<usize>>,
 }
 
 async fn read_wordlist(path: PathBuf) -> Result<Vec<String>, io::Error> {
@@ -271,9 +283,12 @@ async fn main() -> Result<()> {
             cli.include_status.clone(),
             cli.depth,
             cli.delay,
-            cli.exact_words,
-            cli.exact_chars,
-            cli.exact_lines,
+            cli.exact_words.clone(),
+            cli.exact_chars.clone(),
+            cli.exact_lines.clone(),
+            cli.exclude_exact_words.clone(),
+            cli.exclude_exact_chars.clone(),
+            cli.exclude_exact_lines.clone(),
         )
         .await?;
     }

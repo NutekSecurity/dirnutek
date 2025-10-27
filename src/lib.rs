@@ -25,9 +25,13 @@ pub async fn perform_scan(
     http_method: &HttpMethod,
     exclude_status: &Option<HashSet<u16>>,
     include_status: &Option<HashSet<u16>>,
-    exact_words: Option<usize>,
-    exact_chars: Option<usize>,
-    exact_lines: Option<usize>,
+    _scan_delay: Option<u64>,
+    exact_words: Option<Vec<usize>>,
+    exact_chars: Option<Vec<usize>>,
+    exact_lines: Option<Vec<usize>>,
+    exclude_exact_words: Option<Vec<usize>>,
+    exclude_exact_chars: Option<Vec<usize>>,
+    exclude_exact_lines: Option<Vec<usize>>,
 ) -> Result<Option<url::Url>> {
     let mut url_string = base_url.to_string();
     if !url_string.ends_with('/') {
@@ -88,14 +92,36 @@ pub async fn perform_scan(
         (w, c, l)
     };
 
-    if let Some(exact_w) = exact_words && words != exact_w {
-        return Ok(None);
+    if let Some(exact_w_list) = exact_words {
+        if !exact_w_list.contains(&words) {
+            return Ok(None);
+        }
     }
-    if let Some(exact_c) = exact_chars && chars != exact_c {
-        return Ok(None);
+    if let Some(exact_c_list) = exact_chars {
+        if !exact_c_list.contains(&chars) {
+            return Ok(None);
+        }
     }
-    if let Some(exact_l) = exact_lines && lines != exact_l {
-        return Ok(None);
+    if let Some(exact_l_list) = exact_lines {
+        if !exact_l_list.contains(&lines) {
+            return Ok(None);
+        }
+    }
+
+    if let Some(exclude_exact_w_list) = exclude_exact_words {
+        if exclude_exact_w_list.contains(&words) {
+            return Ok(None);
+        }
+    }
+    if let Some(exclude_exact_c_list) = exclude_exact_chars {
+        if exclude_exact_c_list.contains(&chars) {
+            return Ok(None);
+        }
+    }
+    if let Some(exclude_exact_l_list) = exclude_exact_lines {
+        if exclude_exact_l_list.contains(&lines) {
+            return Ok(None);
+        }
     }
 
     let output = match status_code {
@@ -144,10 +170,14 @@ pub async fn start_scan(
     include_status: Option<HashSet<u16>>,
     max_depth: usize,
     delay: Option<u64>,
-    exact_words: Option<usize>,
-    exact_chars: Option<usize>,
-    exact_lines: Option<usize>,
+    exact_words: Option<Vec<usize>>,
+    exact_chars: Option<Vec<usize>>,
+    exact_lines: Option<Vec<usize>>,
+    exclude_exact_words: Option<Vec<usize>>,
+    exclude_exact_chars: Option<Vec<usize>>,
+    exclude_exact_lines: Option<Vec<usize>>,
 ) -> Result<()> {
+    let scan_delay_for_loop = delay.clone();
     let scan_queue: Arc<Mutex<VecDeque<(url::Url, usize)>>> = Arc::new(Mutex::new(VecDeque::new()));
     let mut join_set: JoinSet<Result<()>> = JoinSet::new();
 
@@ -189,11 +219,14 @@ pub async fn start_scan(
             let word_clone = word.clone();
             let visited_urls_clone = visited_urls.clone();
             let scan_queue_clone = scan_queue.clone();
-            let delay_clone = delay;
+            let scan_delay_clone = scan_delay_for_loop.clone();
             let http_method_clone = http_method.clone();
-            let exact_words_clone = exact_words;
-            let exact_chars_clone = exact_chars;
-            let exact_lines_clone = exact_lines;
+            let exact_words_clone = exact_words.clone();
+            let exact_chars_clone = exact_chars.clone();
+            let exact_lines_clone = exact_lines.clone();
+            let exclude_exact_words_clone = exclude_exact_words.clone();
+            let exclude_exact_chars_clone = exclude_exact_chars.clone();
+            let exclude_exact_lines_clone = exclude_exact_lines.clone();
 
             join_set.spawn(async move {
                 let _permit = semaphore_clone
@@ -201,7 +234,7 @@ pub async fn start_scan(
                     .await
                     .expect("Failed to acquire semaphore permit");
 
-                if let Some(d) = delay_clone {
+                if let Some(d) = scan_delay_clone {
                     tokio::time::sleep(tokio::time::Duration::from_millis(d)).await;
                 }
 
@@ -213,9 +246,13 @@ pub async fn start_scan(
                     &http_method_clone,
                     &exclude_status_clone,
                     &include_status_clone,
+                    scan_delay_clone,
                     exact_words_clone,
                     exact_chars_clone,
                     exact_lines_clone,
+                    exclude_exact_words_clone,
+                    exclude_exact_chars_clone,
+                    exclude_exact_lines_clone,
                 )
                 .await;
 
@@ -287,9 +324,13 @@ mod tests {
             &HttpMethod::GET,
             &None,
             &None,
-            None,
-            None,
-            None,
+            None, // exact_words
+            None, // exact_chars
+            None, // exact_lines
+            None, // scan_delay
+            None, // exclude_exact_words
+            None, // exclude_exact_chars
+            None, // exclude_exact_lines
         )
         .await;
         assert!(result.is_ok());
@@ -318,9 +359,13 @@ mod tests {
             &HttpMethod::GET,
             &None,
             &None,
-            None,
-            None,
-            None,
+            None, // exact_words
+            None, // exact_chars
+            None, // exact_lines
+            None, // scan_delay
+            None, // exclude_exact_words
+            None, // exclude_exact_chars
+            None, // exclude_exact_lines
         )
         .await;
         assert!(result.is_ok()); // 404 is a valid HTTP response, not an error in reqwest
@@ -356,9 +401,13 @@ mod tests {
             &HttpMethod::GET,
             &None,
             &None,
-            None,
-            None,
-            None,
+            None, // exact_words
+            None, // exact_chars
+            None, // exact_lines
+            None, // scan_delay
+            None, // exclude_exact_words
+            None, // exclude_exact_chars
+            None, // exclude_exact_lines
         )
         .await;
         assert!(result.is_err());
@@ -390,9 +439,13 @@ mod tests {
             &HttpMethod::GET,
             &None,
             &Some(include_status),
-            None,
-            None,
-            None,
+            None, // exact_words
+            None, // exact_chars
+            None, // exact_lines
+            None, // scan_delay
+            None, // exclude_exact_words
+            None, // exclude_exact_chars
+            None, // exclude_exact_lines
         )
         .await;
         assert!(result.is_ok());
@@ -428,9 +481,13 @@ mod tests {
             &HttpMethod::GET,
             &None,
             &None,
-            None,
-            None,
-            None,
+            None, // exact_words
+            None, // exact_chars
+            None, // exact_lines
+            None, // scan_delay
+            None, // exclude_exact_words
+            None, // exclude_exact_chars
+            None, // exclude_exact_lines
         )
         .await;
         assert!(result.is_ok());
@@ -493,13 +550,16 @@ mod start_scan_tests {
             semaphore,
             visited_urls.clone(), // Added visited_urls argument
             HttpMethod::GET,
-            None,
-            None,
+            None, // exclude_status
+            None, // include_status
             1,    // max_depth = 1 (no recursion)
             None, // delay
             None, // exact_words
             None, // exact_chars
             None, // exact_lines
+            None, // exclude_exact_words
+            None, // exclude_exact_chars
+            None, // exclude_exact_lines
         )
         .await
         .unwrap();
@@ -553,13 +613,16 @@ mod start_scan_tests {
             semaphore,
             visited_urls.clone(),
             HttpMethod::GET,
-            None,
-            None,
+            None, // exclude_status
+            None, // include_status
             max_depth,
             None, // delay
             None, // exact_words
             None, // exact_chars
             None, // exact_lines
+            None, // exclude_exact_words
+            None, // exclude_exact_chars
+            None, // exclude_exact_lines
         )
         .await
         .unwrap();
