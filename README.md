@@ -58,21 +58,21 @@ Example: You run `dircrab -u http://example.com -w common.txt`, and it finds `ht
 
     * Create a `tokio` task to send an HTTP `GET` or `HEAD` request to that URL.
 
-3. **Concurrency:** Don't do this one by one! Use `tokio::spawn` to launch *hundreds* (or thousands) of these requests concurrently.
+3.  **Concurrency:** Don't do this one by one! Use `tokio::spawn` to launch *hundreds* (or thousands) of these requests concurrently.
 
-4. **Response Handling:**
+4.  **Response Handling:**
 
-    * Check the HTTP status code of the response.
+    *   Check the HTTP status code of the response.
 
-    * **Print interesting results:**
+    *   **Print interesting results:**
 
-        * `[200 OK] /index.html`
+        *   `[200 OK] /index.html`
 
-        * `[301 Moved] /old-page -> /new-page`
+        *   `[301 Moved] /old-page -> /new-page`
 
-        * `[403 Forbidden] /admin` (Finding a "Forbidden" directory is a *win*!)
+        *   `[403 Forbidden] /admin` (Finding a "Forbidden" directory is a *win*!)
 
-    * **Ignore boring results:** By default, you'd ignore `404 Not Found`.
+    *   **Ignore boring results:** By default, you'd ignore `404 Not Found`.
 
 
 
@@ -84,25 +84,25 @@ Example: You run `dircrab -u http://example.com -w common.txt`, and it finds `ht
 
 
 
-* **Recursive Scanning:** If you find a directory (e.g., `/api/`), automatically start a *new* scan inside that directory (e.g., `/api/users`, `/api/v1`, etc.).
+*   **Recursive Scanning:** If you find a directory (e.g., `/api/`), automatically start a *new* scan inside that directory (e.g., `/api/users`, `/api/v1`, etc.).
 
-* **Status Code Filtering:** Add flags to let the user filter results.
+*   **Status Code Filtering:** Add flags to let the user filter results.
 
-    * `--exclude-404` (Default)
+    *   `--exclude-404` (Default)
 
-    * `--include-500` (To find server errors)
+    *   `--include-500` (To find server errors)
 
-    * `--only-200` (To only see valid pages)
+    *   `--only-200` (To only see valid pages)
 
-* **Concurrency Limiting:** Use a `tokio::sync::Semaphore` to limit concurrent requests to a specific number (e.g., 50) so you don't crash your machine or the target.
+*   **Concurrency Limiting:** Use a `tokio::sync::Semaphore` to limit concurrent requests to a specific number (e.g., 50) so you don't crash your machine or the target.
 
-* **TUI Dashboard:** Use **`ratatui`** to make a cool terminal dashboard showing:
+*   **TUI Dashboard:** Use **`ratatui`** to make a cool terminal dashboard showing:
 
-    * Requests per second (RPS).
+    *   Requests per second (RPS).
 
-    * A live-updating list of "Found" results.
+    *   A live-updating list of "Found" results.
 
-    * Total progress (e.g., "Request 10,234 / 50,000").
+    *   Total progress (e.g., "Request 10,234 / 50,000").
 
 
 
@@ -144,7 +144,7 @@ This plan outlines a structured approach to building `DirCrab`, starting with th
 
         ```
 
-    *   **Consideration:** Start with a minimal set of features for `tokio` and `reqwest` and add more as needed to keep compile times down. `rustls-tls` is generally preferred for security over `native-tls`.
+    *   ✅ **Consideration:** Start with a minimal set of features for `tokio` and `reqwest` and add more as needed to keep compile times down. `rustls-tls` is generally preferred for security over `native-tls`.
 
 
 
@@ -156,7 +156,7 @@ This plan outlines a structured approach to building `DirCrab`, starting with th
 
     *   ✅ Implement argument validation (e.g., URL format, wordlist file existence).
 
-    *   **Consideration:** Provide clear help messages for all arguments.
+    *   ✅ **Consideration:** Provide clear help messages for all arguments.
 
 
 
@@ -182,7 +182,7 @@ This plan outlines a structured approach to building `DirCrab`, starting with th
 
     *   ✅ Spawn each `scan_url` call as a `tokio::spawn` task. Collect the `JoinHandle`s.
 
-    *   **Consideration:** `reqwest::Client` should be created once and reused for all requests to benefit from connection pooling. Implement a timeout for requests to prevent hanging.
+    *   ✅ **Consideration:** `reqwest::Client` should be created once and reused for all requests to benefit from connection pooling. Implement a timeout for requests to prevent hanging.
 
 
 
@@ -268,9 +268,9 @@ This plan outlines a structured approach to building `DirCrab`, starting with th
 
 1.  **Robust Error Handling:**
 
-    *   Use `anyhow::Result` for functions that can fail.
+    *   ✅ Use `anyhow::Result` for functions that can fail.
 
-    *   Provide informative error messages to the user.
+    *   ✅ Provide informative error messages to the user.
 
     *   Handle specific `reqwest` errors (e.g., network issues, DNS resolution failures).
 
@@ -304,7 +304,7 @@ This plan outlines a structured approach to building `DirCrab`, starting with th
 
 *   **Modularity:** Organize code into logical modules (e.g., `cli.rs`, `scanner.rs`, `tui.rs`).
 
-*   **Testing:** Write unit tests for individual functions and integration tests for the overall flow.
+*   ✅ **Testing:** Write unit tests for individual functions and integration tests for the overall flow.
 
 *   **User Experience:** Ensure the CLI is intuitive and the output is clear and actionable.
 
@@ -317,3 +317,103 @@ This plan outlines a structured approach to building `DirCrab`, starting with th
 *   ✅ **SSL/TLS:** `reqwest` handles this by default, but be aware of potential issues with self-signed certificates or older TLS versions.
 
 This plan provides a roadmap for building `DirCrab`. Remember to iterate, test frequently, and enjoy the process of mastering asynchronous Rust!
+
+
+
+## Notes
+
+### Tokio Remarks
+
+`tokio` is an asynchronous runtime for Rust, enabling concurrent operations without traditional threads. In this crate, it's primarily used to manage and execute non-blocking I/O operations and concurrent tasks efficiently.
+
+**What `tokio` is used for:**
+
+*   **Asynchronous Execution**: Running multiple operations (like network requests or file I/O) concurrently without blocking the main thread.
+*   **Concurrency Control**: Managing shared resources and limiting the number of simultaneous tasks.
+*   **Task Management**: Spawning, monitoring, and awaiting the completion of asynchronous tasks.
+*   **Asynchronous I/O**: Performing file and network operations in a non-blocking manner.
+
+**How and When `tokio` is used:**
+
+1.  **`#[tokio::main]` (in `src/main.rs`)**:
+    *   **How**: This attribute macro transforms the `main` function into an asynchronous entry point, setting up the `tokio` runtime to execute the async code.
+    *   **When**: It's used once at the very beginning of the program to enable the entire application to run asynchronously.
+
+2.  **`tokio::spawn` (in `src/main.rs` and `src/lib.rs`)**:
+    *   **How**: Spawns a new asynchronous task that runs concurrently with other tasks on the `tokio` runtime.
+    *   **When**: 
+        *   In `src/main.rs`, it's used to spawn a dedicated "printer" task (`printer_handle`) that receives and prints messages from the scanning process.
+        *   In `src/lib.rs` (within the `start_scan` function), it's used to spawn multiple `perform_scan` tasks, allowing the application to send many HTTP requests concurrently.
+
+3.  **`tokio::sync::mpsc::Sender` (in `src/lib.rs` and `src/main.rs`)**:
+    *   **How**: Provides an asynchronous, multi-producer, single-consumer channel for sending messages between tasks.
+    *   **When**: The `Sender` (`tx`) is passed around to `perform_scan` tasks, allowing them to send formatted scan results (e.g., `"[200 OK] http://example.com [10W, 50C, 2L]"`) back to the central printer task in `main.rs`.
+
+4.  **`tokio::sync::{Mutex, Semaphore}` (in `src/lib.rs` and `src/main.rs`)**:
+    *   **How**: 
+        *   `Mutex`: An asynchronous mutual exclusion primitive, similar to a standard mutex but designed for async contexts.
+        *   `Semaphore`: A counting semaphore used to limit the number of concurrent operations.
+    *   **When**: 
+        *   `Mutex`: Used to protect shared data structures like `visited_urls` (to prevent rescanning) and `scan_queue` (to manage URLs to be scanned) from concurrent access by multiple tasks.
+        *   `Semaphore`: Used in `start_scan` to limit the number of active `perform_scan` tasks (and thus concurrent HTTP requests), preventing the application from overwhelming the target server or its own resources.
+
+5.  **`tokio::time::sleep` (in `src/lib.rs` and tests)**:
+    *   **How**: Asynchronously pauses the execution of the current task for a specified duration without blocking the entire runtime.
+    *   **When**: 
+        *   In `perform_scan`, it's used to implement a `scan_delay` between requests if configured, to avoid hammering the target server.
+        *   In `start_scan`, it's used within the `tokio::select!` block as a fallback to periodically check the queue if no tasks have completed.
+        *   In tests, it's used to simulate delays or ensure proper timing for asynchronous operations.
+
+6.  **`tokio::select!` (in `src/lib.rs`)**:
+    *   **How**: Allows waiting on multiple asynchronous operations simultaneously and executing the branch corresponding to the first operation that completes.
+    *   **When**: In `start_scan`, it's used to efficiently wait for either a spawned task to complete (potentially adding new URLs to the queue) or for a short timeout, preventing the main loop from busy-waiting when the queue is empty but tasks are still running.
+
+7.  **`tokio::fs::File`, `tokio::io::{AsyncBufReadExt, BufReader}` (in `src/main.rs`)**:
+    *   **How**: Provides asynchronous file I/O operations.
+    *   **When**: In `main.rs`, these are used to asynchronously read the wordlist file, allowing the application to remain responsive while loading potentially large files.
+
+8.  **`tokio::net::TcpListener` (in tests)**:
+    *   **How**: Provides an asynchronous TCP listener for network connections.
+    *   **When**: Used in tests (e.g., `test_perform_scan_timeout`) to set up a mock server that can simulate network behavior like timeouts, allowing for robust testing of the `perform_scan` function.
+
+9.  **`tokio::task::JoinSet` (in `src/lib.rs`)**:
+    *   **How**: A collection of spawned tasks that can be awaited. It allows for managing a dynamic set of tasks and waiting for any of them to complete.
+    *   **When**: In `start_scan`, it's used to keep track of all the `perform_scan` tasks that have been spawned. This allows the `start_scan` loop to know if there are still active tasks and to await their completion before finishing.
+
+### Reqwest Remarks
+
+`reqwest` is a powerful and ergonomic HTTP client for Rust, built on top of `tokio`. In this crate, it's exclusively used for making HTTP requests to target URLs.
+
+**What `reqwest` is used for:**
+
+*   **Sending HTTP Requests**: The primary purpose is to send various types of HTTP requests (GET, POST, PUT, DELETE, HEAD, OPTIONS, PATCH) to web servers.
+*   **Handling HTTP Responses**: Receiving and processing the responses from these requests, including status codes, headers, and body content.
+*   **Client Configuration**: Configuring aspects of the HTTP client, such as timeouts and redirect policies.
+
+**How and When `reqwest` is used:**
+
+1.  **`reqwest::Client` (in `src/main.rs` and `src/lib.rs`)**:
+    *   **How**: An instance of `reqwest::Client` is created using `Client::builder().build().unwrap()`. This client is designed to be reused across multiple requests for efficiency, as it manages connection pooling and other resources.
+    *   **When**: 
+        *   In `src/main.rs`, a `Client` is initialized once at the start of the program. This client is then passed to the `start_scan` function.
+        *   In `src/lib.rs`, within the `perform_scan` function, the `Client` is used to execute the actual HTTP requests.
+        *   In tests, a `Client` is created for each test case to make HTTP requests to the mock server.
+
+2.  **Making HTTP Requests (in `src/lib.rs`)**:
+    *   **How**: The `Client` instance provides methods corresponding to HTTP verbs (e.g., `client.get()`, `client.post()`, `client.head()`, etc.). These methods return a `RequestBuilder` which is then used to send the request with `.send().await?`. For `OPTIONS` requests, `client.request(reqwest::Method::OPTIONS, target_url.as_str())` is used to explicitly specify the method.
+    *   **When**: Inside the `perform_scan` function, for each `target_url` and `http_method`, an appropriate `reqwest` method is called to send the HTTP request.
+
+3.  **Configuring Redirect Behavior (in `src/main.rs` and `src/lib.rs` tests)**:
+    *   **How**: The `Client::builder()` is configured with `.redirect(reqwest::redirect::Policy::none())`.
+    *   **When**: This is crucial for a web scanner like `dircrab`. By default, `reqwest` would automatically follow HTTP redirects (like 301, 302). However, `dircrab` needs to explicitly observe these redirect status codes to report them and potentially use the redirect target for further scanning. Disabling automatic redirects ensures that the `perform_scan` function receives the initial response status code.
+
+4.  **Handling Responses (in `src/lib.rs`)**:
+    *   **How**: After sending a request, the `res` object (of type `reqwest::Response`) is used to extract information such as:
+        *   `res.status()`: To get the HTTP status code.
+        *   `res.headers()`: To access response headers (e.g., to get the `Location` header for redirects).
+        *   `res.text().await?`: To asynchronously read the response body as text.
+    *   **When**: In `perform_scan`, after an HTTP request is sent, the status code is checked for filtering and reporting. The response body is read to count words, characters, and lines, which are also used for filtering and output.
+
+5.  **Error Handling**:
+    *   `reqwest` operations return `Result` types, allowing for robust error handling. The `?` operator is used to propagate errors.
+    *   The comment `// 404 is a valid HTTP response, not an error in reqwest` highlights that `reqwest` considers any valid HTTP response (even 4xx or 5xx status codes) as a successful *transport* of the response. The application logic then interprets these status codes to determine if the scan result is "interesting" or not.
