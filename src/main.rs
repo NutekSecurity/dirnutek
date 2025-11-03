@@ -17,7 +17,7 @@ fn parse_status_codes(s: &str) -> Result<HashSet<u16>, String> {
         .map_err(|e| format!("Invalid status code: {}", e))
 }
 
-use dircrab::{HttpMethod, start_scan};
+use dircrab::{FuzzMode, HttpMethod, start_scan};
 
 fn wordlist_path_parser(s: &str) -> Result<PathBuf, String> {
     let path = PathBuf::from(s);
@@ -48,8 +48,13 @@ fn parse_concurrency(s: &str) -> Result<usize, String> {
 )]
 struct Cli {
     /// The base URL(s) to scan (e.g., `http://testsite.com`). Can be specified multiple times.
+    /// Use the `FUZZ` keyword to indicate where the wordlist should be inserted.
+    /// Examples:
+    /// - Path fuzzing: `http://example.com/FUZZ`
+    /// - Subdomain fuzzing: `http://FUZZ.example.com`
+    /// - Parameter fuzzing: `http://example.com/page?id=FUZZ`
     #[arg(short, long, value_name = "URL")]
-    urls: Vec<url::Url>,
+    urls: Vec<String>,
 
     /// Path to a file containing a list of URLs to scan, one per line.
     #[arg(long, value_name = "FILE")]
@@ -138,11 +143,39 @@ async fn read_wordlist(path: PathBuf) -> Result<Vec<String>, io::Error> {
 async fn main() -> Result<()> {
     let cli = Cli::parse();
 
-    let mut target_urls_set: HashSet<url::Url> = HashSet::new();
+    let mut target_urls_with_modes: Vec<(url::Url, FuzzMode)> = Vec::new();
+
+    // Helper function to determine FuzzMode and parse URL
+    let parse_url_and_fuzz_mode = |url_str: &str| -> Result<(url::Url, FuzzMode), anyhow::Error> {
+        let parsed_url = url::Url::parse(url_str)?;
+
+        // Check for supported schemes
+        let scheme = parsed_url.scheme();
+        if scheme != "http" && scheme != "https" {
+            anyhow::bail!("Unsupported URL scheme: {}. Only http and https are supported.", scheme);
+        }
+
+        let fuzz_mode = if url_str.contains("FUZZ") {
+            if url_str.contains("FUZZ.") {
+                FuzzMode::Subdomain
+            } else if url_str.contains("?") && url_str.contains("FUZZ") {
+                FuzzMode::Parameter
+            } else {
+                FuzzMode::Path
+            }
+        } else {
+            FuzzMode::Path
+        };
+        Ok((parsed_url, fuzz_mode))
+    };
 
     // Collect URLs from direct arguments
-    if !cli.urls.is_empty() {
-        target_urls_set.extend(cli.urls);
+    for url_str in cli.urls {
+        if let Ok(item) = parse_url_and_fuzz_mode(&url_str) {
+            target_urls_with_modes.push(item);
+        } else {
+            eprintln!("Warning: Could not parse URL '{}'. Skipping.", url_str);
+        }
     }
 
     // Collect URLs from urls_file
@@ -157,21 +190,10 @@ async fn main() -> Result<()> {
             if trimmed_line.is_empty() || trimmed_line.starts_with("#") {
                 continue;
             }
-            match url::Url::parse(trimmed_line) {
-                Ok(parsed_url) => {
-                    if parsed_url.scheme() == "http" || parsed_url.scheme() == "https" {
-                        target_urls_set.insert(parsed_url);
-                    } else {
-                        eprintln!(
-                            "Warning: Unsupported URL scheme for '{}' from file. Only http and https are supported.",
-                            trimmed_line
-                        );
-                    }
-                }
-                Err(e) => eprintln!(
-                    "Warning: Could not parse URL '{}' from file: {}",
-                    trimmed_line, e
-                ),
+            if let Ok(item) = parse_url_and_fuzz_mode(trimmed_line) {
+                target_urls_with_modes.push(item);
+            } else {
+                eprintln!("Warning: Could not parse URL '{}' from file. Skipping.", trimmed_line);
             }
         }
     }
@@ -194,44 +216,29 @@ async fn main() -> Result<()> {
             }
             for mat in url_regex.find_iter(trimmed_line) {
                 let url_str = mat.as_str();
-                match url::Url::parse(url_str) {
-                    Ok(parsed_url) => {
-                        if parsed_url.scheme() == "http" || parsed_url.scheme() == "https" {
-                            target_urls_set.insert(parsed_url);
-                        } else {
-                            eprintln!(
-                                "Warning: Unsupported URL scheme for '{}' from results file. Only http and https are supported.",
-                                url_str
-                            );
-                        }
-                    }
-                    Err(e) => eprintln!(
-                        "Warning: Could not parse URL '{}' from results file: {}",
-                        url_str, e
-                    ),
+                if let Ok(item) = parse_url_and_fuzz_mode(url_str) {
+                    target_urls_with_modes.push(item);
+                } else {
+                    eprintln!("Warning: Could not parse URL '{}' from results file. Skipping.", url_str);
                 }
             }
         }
     }
 
-    let target_urls: Vec<url::Url> = target_urls_set.into_iter().collect();
-    let mut processed_urls = Vec::new();
+    let mut processed_urls_with_modes = Vec::new();
 
-    for url in target_urls {
+    for (url, fuzz_mode) in target_urls_with_modes {
         let mut new_url = url;
-        if !new_url.path().ends_with('/') {
+        if fuzz_mode == FuzzMode::Path && !new_url.path().ends_with('/') {
             let mut path = new_url.path().to_string();
             path.push('/');
             new_url.set_path(&path);
         }
-        processed_urls.push(new_url);
+        processed_urls_with_modes.push((new_url, fuzz_mode));
     }
 
-    if processed_urls.is_empty() {
-        eprintln!(
-            "Error: No URLs provided for scanning. Use --url, --urls-file, or --results-file."
-        );
-        return Ok(());
+    if processed_urls_with_modes.is_empty() {
+        anyhow::bail!("No URLs provided for scanning. Use --url, --urls-file, or --results-file.");
     }
 
     println!("# Wordlist: {}", cli.wordlist.display());
@@ -257,7 +264,7 @@ async fn main() -> Result<()> {
     // Add initial target URLs to the globally visited set
     {
         let mut visited = visited_urls.lock().await;
-        for url in &processed_urls {
+        for (url, _) in &processed_urls_with_modes {
             visited.insert(url.clone());
         }
     }
@@ -269,8 +276,8 @@ async fn main() -> Result<()> {
         }
     });
 
-    for base_url in processed_urls {
-        println!("# Starting scan for URL: {}", base_url);
+    for (base_url, fuzz_mode) in processed_urls_with_modes {
+        println!("# Starting scan for URL: {} (FuzzMode: {:?})", base_url, fuzz_mode);
         start_scan(
             client.clone(), // Clone client for each scan
             base_url,
@@ -289,6 +296,7 @@ async fn main() -> Result<()> {
             cli.exclude_exact_words.clone(),
             cli.exclude_exact_chars.clone(),
             cli.exclude_exact_lines.clone(),
+            fuzz_mode,
         )
         .await?;
     }

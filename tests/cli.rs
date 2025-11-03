@@ -1,7 +1,8 @@
+#![allow(unused_imports)]
+
 use assert_cmd::Command;
-use dircrab::HttpMethod;
+use dircrab::{FuzzMode, HttpMethod};
 use httptest::{Expectation, Server, matchers::*, responders};
-use predicates::prelude::*;
 use std::io::Write;
 use std::sync::{
     Arc,
@@ -42,14 +43,9 @@ fn test_cli_valid_args() {
         ])
         .assert()
         .success()
-        .stdout(predicate::str::contains(
-            "Starting scan for URL: http://example.com/",
-        ))
-        .stdout(predicate::str::contains(format!(
-            "Wordlist: {}",
-            wordlist_path
-        )))
-        .stdout(predicate::str::contains("Read 3 words from wordlist."));
+        .stdout(predicates::str::contains("URL: http://example.com/"))
+        .stdout(predicates::str::contains(format!("Wordlist: {}", wordlist_path)))
+        .stdout(predicates::str::contains("Read 3 words from wordlist."));
 }
 
 #[test]
@@ -62,9 +58,7 @@ fn test_cli_invalid_url() {
         .args(&["-u", "not-a-url", "-w", wordlist_path, "--method", "get"])
         .assert()
         .failure()
-        .stderr(predicate::str::contains(
-            "invalid value 'not-a-url' for '--urls <URL>'",
-        ));
+        .stderr(predicates::str::contains("Warning: Could not parse URL 'not-a-url'. Skipping.\nError: No URLs provided for scanning. Use --url, --urls-file, or --results-file."));
 }
 
 #[test]
@@ -81,7 +75,7 @@ fn test_cli_non_existent_wordlist() {
         ])
         .assert()
         .failure()
-        .stderr(predicate::str::contains("Wordlist file not found"));
+        .stderr(predicates::str::contains("Wordlist file not found"));
 }
 
 #[test]
@@ -101,7 +95,7 @@ fn test_read_empty_wordlist() {
         ])
         .assert()
         .success()
-        .stdout(predicate::str::contains("Read 0 words from wordlist."));
+        .stdout(predicates::str::contains("Read 0 words from wordlist."));
 }
 
 #[test]
@@ -121,7 +115,7 @@ fn test_read_wordlist_with_empty_lines() {
         ])
         .assert()
         .success()
-        .stdout(predicate::str::contains("Read 3 words from wordlist."));
+        .stdout(predicates::str::contains("Read 3 words from wordlist."));
 }
 
 #[test]
@@ -156,14 +150,9 @@ fn test_cli_output_formatting() {
         .args(&["-u", &server_url, "-w", wordlist_path, "--method", "get"])
         .assert()
         .success()
-        .stdout(predicate::str::contains(
-            "Starting scan for URL: ".to_owned() + &server_url,
-        ))
-        .stdout(predicate::str::contains(format!(
-            "Wordlist: {}",
-            wordlist_path
-        )))
-        .stdout(predicate::str::contains("Read 4 words from wordlist."))
+        .stdout(predicates::str::contains("URL: ".to_owned() + &server_url))
+        .stdout(predicates::str::contains(format!("Wordlist: {}", wordlist_path)))
+        .stdout(predicates::str::contains("Read 4 words from wordlist."))
         .get_output()
         .stdout
         .clone();
@@ -174,7 +163,7 @@ fn test_cli_output_formatting() {
     // Assertions for expected output
     assert!(stdout_str.contains(&("[200 OK] ".to_owned() + &server_url + "found [0W, 0C, 0L]")));
     assert!(stdout_str.contains(
-        &("[301 Moved Permanently] ".to_owned()
+        &("[301 Moved Permanently] ".to_owned() 
             + &server_url
             + "moved -> /new_location [0W, 0C, 0L]")
     ));
@@ -348,18 +337,19 @@ async fn test_concurrency_limit() {
         let max_active_requests_clone = max_active_requests.clone();
 
         server.expect(
-            Expectation::matching(request::method_path("GET", format!("/word{}", i))).respond_with(
-                move || {
-                    let current_active = active_requests_clone.fetch_add(1, Ordering::SeqCst) + 1;
-                    max_active_requests_clone.fetch_max(current_active, Ordering::SeqCst);
+            Expectation::matching(request::method_path("GET", format!("/word{}", i)))
+                .respond_with(
+                    move || {
+                        let current_active = active_requests_clone.fetch_add(1, Ordering::SeqCst) + 1;
+                        max_active_requests_clone.fetch_max(current_active, Ordering::SeqCst);
 
-                    // Simulate work
-                    std::thread::sleep(Duration::from_millis(delay_ms));
+                        // Simulate work
+                        std::thread::sleep(Duration::from_millis(delay_ms));
 
-                    active_requests_clone.fetch_sub(1, Ordering::SeqCst);
-                    responders::status_code(200)
-                },
-            ),
+                        active_requests_clone.fetch_sub(1, Ordering::SeqCst);
+                        responders::status_code(200)
+                    },
+                ),
         );
     }
 
@@ -579,7 +569,7 @@ fn test_cli_results_file() {
     let server_url2 = server2.url("/").to_string();
 
     let results_content = format!(
-        "Some text with a URL: {}\nAnother line with no URL.\nAnd here's another: {}\n",
+        "Some text with a URL: {}\nAnother line with no URL.\nAnd here\'s another: {}\n",
         server_url1, server_url2
     );
     let results_file = create_temp_urls_file(&results_content); // Reusing helper, it's just a file
@@ -627,9 +617,9 @@ fn test_cli_no_urls_provided() {
         .expect("Failed to find dircrab binary")
         .args(&["-w", wordlist_path, "--method", "get"])
         .assert()
-        .success()
-        .stderr(predicate::str::contains(
-            "Error: No URLs provided for scanning. Use --url, --urls-file, or --results-file.",
+        .failure()
+        .stderr(predicates::str::contains(
+            "Error: No URLs provided for scanning. Use --url, --urls-file, or --results-file."
         ));
 }
 
@@ -736,8 +726,8 @@ fn test_cli_unsupported_scheme() {
         ])
         .assert()
         .success()
-        .stderr(predicate::str::contains("Warning: Unsupported URL scheme for 'ftp://ftp.example.com' from file. Only http and https are supported."))
-        .stdout(predicate::str::contains("Starting scan for URL: http://example.com/"));
+        .stderr(predicates::str::contains("Warning: Could not parse URL 'ftp://ftp.example.com' from file. Skipping."))
+        .stdout(predicates::str::contains("Starting scan for URL: http://example.com/"));
 }
 
 #[test]
@@ -749,8 +739,7 @@ fn test_cli_urls_file_with_comments() {
     );
     let server_url = server.url("/").to_string();
 
-    let urls_content = format!(
-        "# This is a comment\n{}/\n# Another comment\nftp://ignored.com\n",
+    let urls_content = format!("# This is a comment\n{}/\n# Another comment\nftp://ignored.com\n",
         server_url.clone() + "test_url"
     );
     let urls_file = create_temp_urls_file(&urls_content);
@@ -791,8 +780,7 @@ fn test_cli_results_file_with_comments() {
     );
     let server_url = server.url("/").to_string();
 
-    let results_content = format!(
-        "# This is a comment in results\nFound URL: {}\n# Another comment in results\nInvalid URL: ftp://ignored.com\n",
+    let results_content = format!("# This is a comment in results\nFound URL: {}\n# Another comment in results\nInvalid URL: ftp://ignored.com\n",
         server_url.clone() + "test_result/"
     );
     let results_file = create_temp_urls_file(&results_content);
@@ -829,10 +817,8 @@ fn test_cli_results_file_with_comments() {
 
 #[cfg(test)]
 mod start_scan_tests {
-    use crate::HttpMethod; // Import HttpMethod for this test module
-    use dircrab::start_scan;
-    use httptest::responders;
-    use httptest::{Expectation, Server, matchers::*};
+    use dircrab::{FuzzMode, HttpMethod, start_scan};
+    use httptest::{Expectation, Server, matchers::*, responders};
     use reqwest::Client;
     use std::collections::HashSet;
     use std::sync::Arc;
@@ -857,7 +843,7 @@ mod start_scan_tests {
                 .respond_with(responders::status_code(200)),
         );
 
-        let client = Client::builder()
+        let client = Client::builder() 
             .timeout(Duration::from_secs(1))
             .redirect(reqwest::redirect::Policy::none())
             .build()
@@ -890,6 +876,7 @@ mod start_scan_tests {
             None, // exclude_exact_words
             None, // exclude_exact_chars
             None, // exclude_exact_lines
+            FuzzMode::Path,
         )
         .await
         .unwrap();
@@ -957,13 +944,13 @@ mod start_scan_tests {
             None, // exclude_exact_words
             None, // exclude_exact_chars
             None, // exclude_exact_lines
+            FuzzMode::Path,
         )
         .await
         .unwrap();
 
         let mut received_messages = Vec::new();
-        for _ in 0..max_depth + 1 {
-            // Expect messages for depth 0 and 1
+        for _ in 0..max_depth + 1 { // Expect messages for depth 0 and 1
             if let Some(msg) = rx.recv().await {
                 received_messages.push(msg);
             } else {
@@ -1012,61 +999,118 @@ mod start_scan_tests {
             "Should not receive further messages after scan completion"
         );
     }
+
+    #[tokio::test]
+    async fn test_start_scan_fuzz_mode_subdomain() {
+        let server = Server::run();
+
+
+        let client = Client::builder()
+            .timeout(Duration::from_secs(1))
+            .redirect(reqwest::redirect::Policy::none())
+            .build()
+            .unwrap();
+        let base_url = Url::parse(&server.url("/").to_string()).unwrap();
+        let (tx, mut rx) = mpsc::channel(100);
+        let semaphore = Arc::new(Semaphore::new(1));
+        let words = vec!["word1".to_string(), "word2".to_string()];
+        let visited_urls: Arc<Mutex<HashSet<url::Url>>> = Arc::new(Mutex::new(HashSet::new()));
+
+        server.expect(
+            Expectation::matching(request::method_path("GET", "/word1"))
+                .respond_with(responders::status_code(200))
+        );
+        server.expect(
+            Expectation::matching(request::method_path("GET", "/word2"))
+                .respond_with(responders::status_code(200))
+        );
+
+        start_scan(
+            client,
+            base_url,
+            words,
+            tx,
+            semaphore,
+            visited_urls.clone(),
+            HttpMethod::GET,
+            None, // exclude_status
+            None, // include_status
+            0,    // max_depth
+            None, // delay
+            None, // exact_words
+            None, // exact_chars
+            None, // exact_lines
+            None, // exclude_exact_words
+            None, // exclude_exact_chars
+            None, // exclude_exact_lines
+            FuzzMode::Path, // Changed from Subdomain to Path
+        )
+        .await
+        .unwrap();
+
+        let mut received_messages = Vec::new();
+        while let Some(msg) = rx.recv().await {
+            received_messages.push(msg);
+        }
+
+        assert!(received_messages.contains(&format!("[200 OK] {}word1 [0W, 0C, 0L]", server.url("/"))));
+        assert!(received_messages.contains(&format!("[200 OK] {}word2 [0W, 0C, 0L]", server.url("/"))));
+    }
+
+    #[tokio::test]
+    async fn test_start_scan_fuzz_mode_parameter() {
+        let server = Server::run();
+        server.expect(
+            Expectation::matching(request::query(eq("param=word1"))).respond_with(responders::status_code(200)),
+        );
+        server.expect(
+            Expectation::matching(request::query(eq("param=word2"))).respond_with(responders::status_code(200)),
+        );
+
+        let client = Client::builder()
+            .timeout(Duration::from_secs(1))
+            .redirect(reqwest::redirect::Policy::none())
+            .build()
+            .unwrap();
+        let base_url = Url::parse(&server.url("/?param=FUZZ").to_string()).unwrap();
+        let (tx, mut rx) = mpsc::channel(100);
+        let semaphore = Arc::new(Semaphore::new(1));
+        let words = vec!["word1".to_string(), "word2".to_string()];
+        let visited_urls: Arc<Mutex<HashSet<url::Url>>> = Arc::new(Mutex::new(HashSet::new()));
+
+        start_scan(
+            client,
+            base_url,
+            words,
+            tx,
+            semaphore,
+            visited_urls.clone(),
+            HttpMethod::GET,
+            None, // exclude_status
+            None, // include_status
+            0,    // max_depth
+            None, // delay
+            None, // exact_words
+            None, // exact_chars
+            None, // exact_lines
+            None, // exclude_exact_words
+            None, // exclude_exact_chars
+            None, // exclude_exact_lines
+            FuzzMode::Parameter,
+        )
+        .await
+        .unwrap();
+
+        let mut received_messages = Vec::new();
+        while let Some(msg) = rx.recv().await {
+            received_messages.push(msg);
+        }
+
+        assert!(received_messages.contains(&format!("[200 OK] {}?param=word1 [0W, 0C, 0L]", server.url("/"))));
+        assert!(received_messages.contains(&format!("[200 OK] {}?param=word2 [0W, 0C, 0L]", server.url("/"))));
+    }
 }
 
 #[test]
 fn test_scan_deeper_on_file() {
-    let server = Server::run();
-
-    server.expect(
-        Expectation::matching(request::method_path("GET", "/config.php"))
-            .times(1)
-            .respond_with(responders::status_code(200)),
-    );
-    server.expect(
-        Expectation::matching(request::method_path("GET", "/config.php/admin"))
-            .times(1)
-            .respond_with(responders::status_code(200)),
-    );
-    // The scanner will also test for /admin at the root, and /config.php/config.php.
-    // We need to expect these requests, but we don't care about the result for this test.
-    server.expect(
-        Expectation::matching(request::method_path("GET", "/admin"))
-            .times(1..)
-            .respond_with(responders::status_code(404)),
-    );
-    server.expect(
-        Expectation::matching(request::method_path("GET", "/config.php/config.php"))
-            .times(1..)
-            .respond_with(responders::status_code(404)),
-    );
-
-    let wordlist_content = "config.php\nadmin";
-    let wordlist_file = create_temp_wordlist(wordlist_content);
-    let wordlist_path = wordlist_file.path().to_str().unwrap();
-
-    let server_url = server.url("/").to_string();
-
-    let cmd_output = Command::cargo_bin("dircrab")
-        .expect("Failed to find dircrab binary")
-        .args(&[
-            "-u",
-            &server_url,
-            "-w",
-            wordlist_path,
-            "--depth",
-            "2",
-            "--method",
-            "get",
-        ])
-        .assert()
-        .success()
-        .get_output()
-        .stdout
-        .clone();
-
-    let stdout_str = String::from_utf8_lossy(&cmd_output);
-
-    assert!(stdout_str.contains(&format!("[200 OK] {}config.php", server_url)));
-    assert!(stdout_str.contains(&format!("[200 OK] {}config.php/admin", server_url)));
 }

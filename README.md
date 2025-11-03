@@ -1,324 +1,252 @@
-Okay, here's a perfect "chillout" project. It's fun, 100% safe to build and test, and a fantastic way to master asynchronous Rust.
+# `DirCrab` - A High-Speed, Professional Web Fuzzer
 
-
-
-It's a **blazing-fast, concurrent directory and file scanner** for web servers. Think of it as your own personal version of `gobuster` or `dirsearch`.
-
-
+`DirCrab` is a blazing-fast, concurrent directory and file scanner for web servers, designed to be a professional-grade tool for web reconnaissance. It started as a fun "chillout" project to master asynchronous Rust and has evolved into a powerful fuzzer capable of discovering hidden content and potential vulnerabilities.
 
 ---
 
+## Development Roadmap
 
+This roadmap outlines the development plan for `DirCrab`, transforming it from a powerful scanner into a full-featured, professional web fuzzing tool.
 
-## Project Idea: `DirCrab` - A High-Speed Web Content Scanner
+### **Phase 1: Core Engine (Completed)**
 
+This phase established the fundamental building blocks of the fuzzer.
 
-
-The core idea is to build a tool that takes a wordlist and a target URL, and then *very* quickly tries to find valid pages, directories, or files on that server.
-
-
-
-Example: You run `dircrab -u http://example.com -w common.txt`, and it finds `http://example.com/admin` (a 403 Forbidden) and `http://example.com/robots.txt` (a 200 OK).
-
-
-
-### Why This Is a Great "Chillout" Project 🏖️
-
-
-
-* **No `unsafe` Code:** This is a 100% "safe" Rust project. It's all about high-level logic.
-
-* **Masters Asynchronous Rust:** The *entire* project is a practical lesson in `async`/`await` and `tokio`. The goal is to make thousands of HTTP requests per second, which is `tokio`'s specialty.
-
-* **Pure Networking:** It's all about sending HTTP requests and reading HTTP responses. You'll become an expert with the **`reqwest`** crate.
-
-* **Fundamental Recon:** This is a *core* reconnaissance technique. Every single web penetration test starts with this.
-
-
+*   ✅ **CLI Argument Parsing:** A robust command-line interface using `clap`.
+*   ✅ **Concurrent HTTP Requests:** A high-performance, asynchronous scanning engine using `tokio` and `reqwest`.
+*   ✅ **Response Handling & Filtering:** Basic and advanced filtering by status code, and content length (words, characters, lines).
+*   ✅ **Concurrency Control:** A `Semaphore` to manage the number of concurrent requests.
+*   ✅ **Recursive Scanning:** The ability to recursively scan discovered directories, with depth control.
+*   ✅ **Multiple HTTP Methods:** Support for a wide range of HTTP methods.
 
 ---
 
+### **Phase 2: Advanced Fuzzing & Flexibility (In Progress)**
 
+This phase focuses on expanding the fuzzer's capabilities to handle more complex and realistic fuzzing scenarios.
+
+*   ✅ **Multiple Fuzzing Modes:**
+    *   **Goal:** Allow fuzzing of different parts of a URL, not just the path.
+    *   **Implementation:**
+        *   Introduce a `FUZZ` keyword that can be placed anywhere in the URL.
+        *   **Parameter Fuzzing:**
+            *   **Use Case:** Discovering vulnerabilities like SQL injection or Cross-Site Scripting (XSS) by fuzzing URL parameters.
+            *   **Example:** `dircrab -u "http://example.com/page?id=FUZZ" -w sqli.txt`
+        *   **Subdomain Fuzzing:**
+            *   **Use Case:** Discovering hidden or forgotten subdomains.
+            *   **Example:** `dircrab -u "http://FUZZ.example.com" -w subdomains.txt`
+    *   **CLI:** The `-u` flag will be enhanced to detect the `FUZZ` keyword and adapt the fuzzing strategy accordingly.
+
+*   **[TO DO] Custom Headers & Authentication:**
+    *   **Goal:** Enable scanning of authenticated endpoints and fuzzing of header values.
+    *   **Implementation:**
+        *   Add a `-H, --header` flag that can be specified multiple times.
+        *   **Use Cases:**
+            *   **Authentication:** `-H "Authorization: Bearer <TOKEN>"`
+            *   **Custom User-Agent:** `-H "User-Agent: MyCustomScanner"`
+            *   **Header Fuzzing:** `-H "X-Forwarded-For: FUZZ"`
+    *   **CLI:** `-H, --header <HEADER>`. The application will need to parse these headers and add them to every request. If `FUZZ` is present in a header value, the fuzzer will iterate through the wordlist for that header.
+
+*   **[TO DO] POST Data Fuzzing:**
+    *   **Goal:** Fuzz the body of `POST` requests.
+    *   **Implementation:**
+        *   Add a `-d, --data` flag to specify the request body.
+        *   If the `FUZZ` keyword is present in the data, the fuzzer will replace it with words from the wordlist.
+    *   **Use Case:** Finding vulnerabilities in forms and API endpoints that accept `POST` requests.
+    *   **Example:** `dircrab -u http://example.com/login -d '{"username":"admin","password":"FUZZ"}' -w passwords.txt -X POST`
+
+---
+
+### **Phase 3: Professional Tooling & Output (To Do)**
+
+This phase focuses on features that make `DirCrab` a professional-grade tool that can be integrated into larger security workflows.
+
+*   **[TO DO] Advanced Reporting:**
+    *   **Goal:** Provide machine-readable output formats for easy parsing and integration with other tools.
+    *   **Implementation:**
+        *   Add a `-o, --output <FILE>` flag to save results to a file.
+        *   Add a `--format` flag to specify the output format.
+        *   Use the `serde` crate to serialize results into different formats.
+    *   **Formats:**
+        *   `json`: For easy parsing by scripts and other tools.
+        *   `csv`: For easy import into spreadsheets.
+        *   `txt`: Plain text (default).
+
+*   **[TO DO] Session Management:**
+    *   **Goal:** Allow users to pause and resume long-running scans.
+    *   **Implementation:**
+        *   Periodically save the state of the scan (e.g., the current queue, visited URLs) to a state file.
+        *   Add a `--resume <STATE_FILE>` flag to load the state and continue the scan.
+    *   **Use Case:** Recovering from interruptions without losing progress on large scans.
+
+---
+
+### **Phase 4: The "Show-Off" Features (Future)**
+
+This phase includes features that will make `DirCrab` a truly top-tier tool.
+
+*   **[FUTURE] Interactive TUI Dashboard:**
+    *   **Goal:** Provide a real-time view of the scan's progress.
+    *   **Implementation:**
+        *   Use a crate like `ratatui` to create a terminal user interface.
+        *   Display real-time statistics like:
+            *   Requests per second (RPS).
+            *   A live-updating list of found results.
+            *   Total progress (e.g., "Request 10,234 / 50,000").
+            *   Error rates.
+
+*   **[FUTURE] Plugin/Scripting Engine:**
+    *   **Goal:** Allow for ultimate flexibility by enabling users to write their own custom logic.
+    *   **Implementation:**
+        *   Embed a scripting language like Lua or Rhai.
+        *   Expose parts of the fuzzer's internal state to the scripting engine.
+    *   **Use Cases:**
+        *   Custom payload generation.
+        *   Complex response validation logic.
+        *   Chaining requests based on previous results.
+
+---
+
+## Original Project Idea & Implementation Notes
+
+The following sections detail the original project idea and implementation notes, which serve as the foundation for the current and future development of `DirCrab`.
 
 ### Core Features (The "MVP")
 
-
-
-1. **CLI:** Use the **`clap`** crate to take command-line arguments:
-
-    * `-u` or `--url`: The base URL to scan (e.g., `http://testsite.com`).
-
-    * `-w` or `--wordlist`: The path to the text file (e.g., `~/wordlists/common.txt`).
-
-2. **Core Logic:**
-
-    * Read the wordlist file.
-
-    * For *each* word in the file (e.g., "admin"), create a new URL (e.g., `http://testsite.com/admin`).
-
-    * Create a `tokio` task to send an HTTP `GET` or `HEAD` request to that URL.
-
+1.  **CLI:** Use the **`clap`** crate to take command-line arguments:
+    *   `-u` or `--url`: The base URL to scan (e.g., `http://testsite.com`).
+    *   `-w` or `--wordlist`: The path to the text file (e.g., `~/wordlists/common.txt`).
+2.  **Core Logic:**
+    *   Read the wordlist file.
+    *   For *each* word in the file (e.g., "admin"), create a new URL (e.g., `http://testsite.com/admin`).
+    *   Create a `tokio` task to send an HTTP `GET` or `HEAD` request to that URL.
 3.  **Concurrency:** Don't do this one by one! Use `tokio::spawn` to launch *hundreds* (or thousands) of these requests concurrently.
-
 4.  **Response Handling:**
-
     *   Check the HTTP status code of the response.
-
     *   **Print interesting results:**
-
         *   `[200 OK] /index.html`
-
         *   `[301 Moved] /old-page -> /new-page`
-
         *   `[403 Forbidden] /admin` (Finding a "Forbidden" directory is a *win*!)
-
     *   **Ignore boring results:** By default, you'd ignore `404 Not Found`.
-
-
-
----
-
-
 
 ### "Show-Off" Bonus Features 🚀
 
-
-
 *   **Recursive Scanning:** If you find a directory (e.g., `/api/`), automatically start a *new* scan inside that directory (e.g., `/api/users`, `/api/v1`, etc.).
-
 *   **Status Code Filtering:** Add flags to let the user filter results.
-
     *   `--exclude-404` (Default)
-
     *   `--include-500` (To find server errors)
-
     *   `--only-200` (To only see valid pages)
-
 *   **Concurrency Limiting:** Use a `tokio::sync::Semaphore` to limit concurrent requests to a specific number (e.g., 50) so you don't crash your machine or the target.
-
 *   **TUI Dashboard:** Use **`ratatui`** to make a cool terminal dashboard showing:
-
     *   Requests per second (RPS).
-
     *   A live-updating list of "Found" results.
-
     *   Total progress (e.g., "Request 10,234 / 50,000").
 
-
-
----
-
-
-
-## Implementation Plan: `DirCrab`
-
-
+### Implementation Plan: `DirCrab`
 
 This plan outlines a structured approach to building `DirCrab`, starting with the Minimum Viable Product (MVP) and then progressively adding "Show-Off" bonus features.
 
-
-
-### Phase 1: Project Setup & MVP
-
-
+#### Phase 1: Project Setup & MVP
 
 1.  ✅ **Project Initialization:**
-
     *   ✅ Create a new Rust project: `cargo new dircrab --bin`
-
     *   ✅ Add dependencies to `Cargo.toml`:
-
         ```toml
-
         [dependencies]
-
         clap = { version = "4.0", features = ["derive"] } # For CLI argument parsing
-
         tokio = { version = "1", features = ["full"] } # For asynchronous runtime
-
         reqwest = { version = "0.11", features = ["json", "rustls-tls"] } # For HTTP requests
-
         anyhow = "1.0" # For simplified error handling
-
         # Consider `url` crate for robust URL manipulation if needed
-
         ```
-
     *   ✅ **Consideration:** Start with a minimal set of features for `tokio` and `reqwest` and add more as needed to keep compile times down. `rustls-tls` is generally preferred for security over `native-tls`.
 
-
-
 2.  ✅ **CLI Argument Parsing (`clap`):**
-
     *   ✅ Define a `struct` to hold command-line arguments (URL, wordlist path).
-
     *   ✅ Use `#[derive(Parser)]` and `#[clap(author, version, about)]` for metadata.
-
     *   ✅ Implement argument validation (e.g., URL format, wordlist file existence).
-
     *   ✅ **Consideration:** Provide clear help messages for all arguments.
 
-
-
 3.  **Wordlist Loading:**
-
     *   ✅ Create an `async` function to read the wordlist file.
-
     *   ✅ Read the file line by line, storing words in a `Vec<String>`.
-
     *   ✅ Handle file I/O errors gracefully (e.g., file not found).
-
     *   **Consideration:** For very large wordlists, consider streaming words instead of loading all into memory to reduce memory footprint.
 
-
-
 4.  **Asynchronous HTTP Requests (`tokio`, `reqwest`):**
-
     *   ✅ Create an `async` function, e.g., `scan_url(client: &reqwest::Client, base_url: &str, word: &str) -> Result<(), anyhow::Error>`.
-
     *   ✅ Inside `scan_url`, construct the full URL (e.g., `http://example.com/admin`).
-
     *   ✅ Use `reqwest::Client` to send `GET` or `HEAD` requests. `HEAD` requests are often faster as they don't download the body, but might not always reflect the true status for all servers. Start with `GET` for simplicity, then optimize to `HEAD` if appropriate.
-
     *   ✅ Spawn each `scan_url` call as a `tokio::spawn` task. Collect the `JoinHandle`s.
-
     *   ✅ **Consideration:** `reqwest::Client` should be created once and reused for all requests to benefit from connection pooling. Implement a timeout for requests to prevent hanging.
 
-
-
 5.  **Response Processing & Output:**
-
     *   ✅ Inside `scan_url`, after receiving a response, check `response.status()`.
-
     *   ✅ Print results for interesting status codes (200 OK, 301 Moved, 403 Forbidden).
-
     *   ✅ By default, ignore 404 Not Found.
-
     *   ✅ Format output clearly, e.g., `[STATUS_CODE] /path -> redirect_target (if 301)`.
-
     *   ✅ **Consideration:** Use a `tokio::sync::mpsc` channel to send results from `scan_url` tasks to a main thread for printing, ensuring ordered output and avoiding interleaved prints.
 
-
-
-### Phase 2: Bonus Features
-
-
+#### Phase 2: Bonus Features
 
 1.  ✅ **Concurrency Limiting (`tokio::sync::Semaphore`):**
-
     *   ✅ Introduce a `tokio::sync::Semaphore` with a configurable maximum number of permits.
-
     *   ✅ Before spawning each `scan_url` task, acquire a permit from the semaphore.
-
     *   ✅ Ensure the permit is released when the `scan_url` task completes (e.g., using `_permit = semaphore.acquire().await;`).
-
     *   ✅ Add a CLI argument for `--concurrency` to set the semaphore limit.
-
     *   ✅ **Consideration:** Experiment with different concurrency limits to find an optimal balance between speed and resource usage.
 
-
-
 2.  ✅ **Status Code Filtering:**
-
     *   ✅ Add CLI arguments like `--exclude-status <CODES>` and `--include-status <CODES>`.
-
     *   ✅ Parse these arguments into a `HashSet<u16>` for efficient lookup.
-
     *   ✅ Modify the response processing logic to filter based on these sets.
-
     *   ✅ **Consideration:** Define clear precedence rules if both `--exclude` and `--include` are used (e.g., `--include` overrides `--exclude`).
 
-
-
 3.  ✅ **Recursive Scanning:**
-
     *   ✅ When a directory is found (e.g., a 200 OK for `/admin/` or a 301 redirect to a directory), add it to a queue of URLs to be scanned.
-
     *   ✅ Implement a mechanism to track already scanned URLs to prevent infinite loops.
-
     *   ✅ Add a CLI argument for `--recursive` or `--depth <N>` to control recursion.
-
     *   ✅ **Consideration:** Be mindful of the performance impact of recursive scanning, as it can significantly increase the number of requests. Implement a maximum recursion depth.
 
-
-
 4.  **TUI Dashboard (`ratatui`):**
-
     *   This is a significant feature and might warrant its own module.
-
     *   Integrate `ratatui` to draw a terminal UI.
-
     *   Use `tokio::sync::mpsc` channels to send updates (RPS, new findings, progress) from the scanning tasks to the TUI rendering loop.
-
     *   Display:
-
         *   Requests per second (RPS) - calculate based on completed requests over time.
-
         *   A live-updating list of "Found" results.
-
         *   Total progress (e.g., "Request X / Y" or percentage).
-
     *   **Consideration:** `ratatui` requires careful state management and event handling. Start with a very basic display and incrementally add complexity. Ensure the TUI doesn't block the scanning process.
 
-
-
-### Phase 3: Error Handling & Refinements
-
-
+#### Phase 3: Error Handling & Refinements
 
 1.  **Robust Error Handling:**
-
     *   ✅ Use `anyhow::Result` for functions that can fail.
-
     *   ✅ Provide informative error messages to the user.
-
     *   Handle specific `reqwest` errors (e.g., network issues, DNS resolution failures).
 
-
-
 2.  **Configuration:**
-
     *   Consider a configuration file (e.g., `dircrab.toml`) for default settings.
 
-
-
 3.  **Performance Optimization:**
-
     *   Profile the application to identify bottlenecks.
-
     *   Experiment with `reqwest` client settings (e.g., `tcp_nodelay`, `connect_timeout`).
 
-
-
 4.  **Documentation:**
-
     *   Add comprehensive comments to the code.
-
     *   Update the `README.md` with usage instructions and examples.
 
-
-
-### General Considerations:
-
-
+#### General Considerations:
 
 *   **Modularity:** Organize code into logical modules (e.g., `cli.rs`, `scanner.rs`, `tui.rs`).
-
 *   ✅ **Testing:** Write unit tests for individual functions and integration tests for the overall flow.
-
 *   **User Experience:** Ensure the CLI is intuitive and the output is clear and actionable.
-
 *   ✅ **Rate Limiting:** Be aware that aggressive scanning can trigger rate limits or IP bans on target servers. Consider adding an optional delay between requests.
-
 *   ✅ **HTTP Methods:** While the MVP focuses on `GET`/`HEAD`, consider adding support for other HTTP methods (e.g., `POST`) as a future enhancement.
-
 *   ✅ **User-Agent:** Set a custom User-Agent header to identify your scanner.
-
 *   ✅ **SSL/TLS:** `reqwest` handles this by default, but be aware of potential issues with self-signed certificates or older TLS versions.
 
 This plan provides a roadmap for building `DirCrab`. Remember to iterate, test frequently, and enjoy the process of mastering asynchronous Rust!
-
-
 
 ## Notes
 
@@ -341,7 +269,7 @@ This plan provides a roadmap for building `DirCrab`. Remember to iterate, test f
 
 2.  **`tokio::spawn` (in `src/main.rs` and `src/lib.rs`)**:
     *   **How**: Spawns a new asynchronous task that runs concurrently with other tasks on the `tokio` runtime.
-    *   **When**: 
+    *   **When**:
         *   In `src/main.rs`, it's used to spawn a dedicated "printer" task (`printer_handle`) that receives and prints messages from the scanning process.
         *   In `src/lib.rs` (within the `start_scan` function), it's used to spawn multiple `perform_scan` tasks, allowing the application to send many HTTP requests concurrently.
 
@@ -350,16 +278,16 @@ This plan provides a roadmap for building `DirCrab`. Remember to iterate, test f
     *   **When**: The `Sender` (`tx`) is passed around to `perform_scan` tasks, allowing them to send formatted scan results (e.g., `"[200 OK] http://example.com [10W, 50C, 2L]"`) back to the central printer task in `main.rs`.
 
 4.  **`tokio::sync::{Mutex, Semaphore}` (in `src/lib.rs` and `src/main.rs`)**:
-    *   **How**: 
+    *   **How**:
         *   `Mutex`: An asynchronous mutual exclusion primitive, similar to a standard mutex but designed for async contexts.
         *   `Semaphore`: A counting semaphore used to limit the number of concurrent operations.
-    *   **When**: 
+    *   **When**:
         *   `Mutex`: Used to protect shared data structures like `visited_urls` (to prevent rescanning) and `scan_queue` (to manage URLs to be scanned) from concurrent access by multiple tasks.
         *   `Semaphore`: Used in `start_scan` to limit the number of active `perform_scan` tasks (and thus concurrent HTTP requests), preventing the application from overwhelming the target server or its own resources.
 
 5.  **`tokio::time::sleep` (in `src/lib.rs` and tests)**:
     *   **How**: Asynchronously pauses the execution of the current task for a specified duration without blocking the entire runtime.
-    *   **When**: 
+    *   **When**:
         *   In `perform_scan`, it's used to implement a `scan_delay` between requests if configured, to avoid hammering the target server.
         *   In `start_scan`, it's used within the `tokio::select!` block as a fallback to periodically check the queue if no tasks have completed.
         *   In tests, it's used to simulate delays or ensure proper timing for asynchronous operations.
@@ -394,7 +322,7 @@ This plan provides a roadmap for building `DirCrab`. Remember to iterate, test f
 
 1.  **`reqwest::Client` (in `src/main.rs` and `src/lib.rs`)**:
     *   **How**: An instance of `reqwest::Client` is created using `Client::builder().build().unwrap()`. This client is designed to be reused across multiple requests for efficiency, as it manages connection pooling and other resources.
-    *   **When**: 
+    *   **When**:
         *   In `src/main.rs`, a `Client` is initialized once at the start of the program. This client is then passed to the `start_scan` function.
         *   In `src/lib.rs`, within the `perform_scan` function, the `Client` is used to execute the actual HTTP requests.
         *   In tests, a `Client` is created for each test case to make HTTP requests to the mock server.

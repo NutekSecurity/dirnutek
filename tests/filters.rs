@@ -1,4 +1,4 @@
-use dircrab::{HttpMethod, start_scan};
+use dircrab::{FuzzMode, HttpMethod, start_scan};
 use httptest::responders;
 use httptest::{Expectation, Server, matchers::*};
 use reqwest::Client;
@@ -37,14 +37,15 @@ async fn test_filter_by_exact_word_count() {
         HttpMethod::GET,
         None,
         None,    // include_status
-        1,
-        None,
+        0,       // max_depth
+        None,    // delay
         Some(vec![3]), // exact_words
         None,    // exact_chars
         None,    // exact_lines
         None,    // exclude_exact_words
         None,    // exclude_exact_chars
         None,    // exclude_exact_lines
+        FuzzMode::Path,
     )
     .await
     .unwrap();
@@ -87,14 +88,15 @@ async fn test_filter_by_exact_word_count_no_match() {
         HttpMethod::GET,
         None,
         None,    // include_status
-        1,
-        None,
+        0,       // max_depth
+        None,    // delay
         Some(vec![5]), // exact_words (no match for 3 or 4 words)
         None,    // exact_chars
         None,    // exact_lines
         None,    // exclude_exact_words
         None,    // exclude_exact_chars
         None,    // exclude_exact_lines
+        FuzzMode::Path,
     )
     .await
     .unwrap();
@@ -137,14 +139,15 @@ async fn test_filter_by_exact_char_count() {
         HttpMethod::GET,
         None,
         None,    // include_status
-        1,
-        None,
+        0,       // max_depth
+        None,    // delay
         None,    // exact_words
         Some(vec![3]), // exact_chars
         None,    // exact_lines
         None,    // exclude_exact_words
         None,    // exclude_exact_chars
         None,    // exclude_exact_lines
+        FuzzMode::Path,
     )
     .await
     .unwrap();
@@ -187,14 +190,15 @@ async fn test_filter_by_exact_char_count_no_match() {
         HttpMethod::GET,
         None,
         None,    // include_status
-        1,
-        None,
+        0,       // max_depth
+        None,    // delay
         None,    // exact_words
         Some(vec![5]), // exact_chars (no match for 3 or 4 chars)
         None,    // exact_lines
         None,    // exclude_exact_words
         None,    // exclude_exact_chars
         None,    // exclude_exact_lines
+        FuzzMode::Path,
     )
     .await
     .unwrap();
@@ -235,16 +239,17 @@ async fn test_filter_by_exact_line_count() {
         semaphore,
         visited_urls.clone(),
         HttpMethod::GET,
-        None,
+        None,    // exclude_status
         None,    // include_status
-        1,
-        None,
+        0,       // max_depth
+        None,    // delay
         None,    // exact_words
         None,    // exact_chars
         Some(vec![2]), // exact_lines
         None,    // exclude_exact_words
         None,    // exclude_exact_chars
         None,    // exclude_exact_lines
+        FuzzMode::Path,
     )
     .await
     .unwrap();
@@ -287,14 +292,15 @@ async fn test_filter_by_exact_line_count_no_match() {
         HttpMethod::GET,
         None,
         None,    // include_status
-        1,
-        None,
+        0,       // max_depth
+        None,    // delay
         None,    // exact_words
         None,    // exact_chars
-        Some(vec![4]), // exact_lines (no match for 2 or 3 lines)
+        Some(vec![5]), // exact_lines (no match for 2 or 3 lines)
         None,    // exclude_exact_words
         None,    // exclude_exact_chars
         None,    // exclude_exact_lines
+        FuzzMode::Path,
     )
     .await
     .unwrap();
@@ -350,14 +356,15 @@ async fn test_filter_by_exact_combined() {
         HttpMethod::GET,
         None,
         None,    // include_status
-        1,
-        None,
+        0,       // max_depth
+        None,    // delay
         Some(vec![6]), // exact_words
         Some(vec![27]),  // exact_chars
         Some(vec![3]),  // exact_lines
         None,    // exclude_exact_words
         None,    // exclude_exact_chars
         None,    // exclude_exact_lines
+        FuzzMode::Path,
     )
     .await
     .unwrap();
@@ -414,14 +421,15 @@ async fn test_filter_by_exclude_exact_word_count() {
         HttpMethod::GET,
         None,
         None,    // include_status
-        1,
-        None,
+        0,       // max_depth
+        None,    // delay
         None,    // exact_words
         None,    // exact_chars
         None,    // exact_lines
         Some(vec![3]), // exclude_exact_words (should exclude "three_words")
         None,    // exclude_exact_chars
         None,    // exclude_exact_lines
+        FuzzMode::Path,
     )
     .await
     .unwrap();
@@ -464,14 +472,15 @@ async fn test_filter_by_exclude_exact_char_count() {
         HttpMethod::GET,
         None,
         None,    // include_status
-        1,
-        None,
+        0,       // max_depth
+        None,    // delay
         None,    // exact_words
         None,    // exact_chars
         None,    // exact_lines
         None,    // exclude_exact_words
         Some(vec![3]), // exclude_exact_chars (should exclude "three_chars")
         None,    // exclude_exact_lines
+        FuzzMode::Path,
     )
     .await
     .unwrap();
@@ -514,14 +523,15 @@ async fn test_filter_by_exclude_exact_line_count() {
         HttpMethod::GET,
         None,
         None,    // include_status
-        1,
-        None,
+        0,       // max_depth
+        None,    // delay
         None,    // exact_words
         None,    // exact_chars
         None,    // exact_lines
         None,    // exclude_exact_words
         None,    // exclude_exact_chars
         Some(vec![2]), // exclude_exact_lines (should exclude "two_lines")
+        FuzzMode::Path,
     )
     .await
     .unwrap();
@@ -577,14 +587,15 @@ async fn test_filter_by_exclude_exact_combined() {
         HttpMethod::GET,
         None,
         None,    // include_status
-        1,
-        None,
+        0,       // max_depth
+        None,    // delay
         None,    // exact_words
         None,    // exact_chars
         None,    // exact_lines
         Some(vec![3]), // exclude_exact_words
         Some(vec![3]), // exclude_exact_chars
         Some(vec![2]), // exclude_exact_lines
+        FuzzMode::Path,
     )
     .await
     .unwrap();

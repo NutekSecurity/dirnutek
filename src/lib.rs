@@ -6,6 +6,16 @@ use std::sync::Arc;
 use tokio::sync::{Mutex, Semaphore, mpsc::Sender};
 use tokio::task::JoinSet;
 
+#[derive(Debug, Clone, ValueEnum, PartialEq)]
+pub enum FuzzMode {
+    /// Fuzzes the path segment of the URL (default).
+    Path,
+    /// Fuzzes a subdomain, indicated by FUZZ.example.com.
+    Subdomain,
+    /// Fuzzes a parameter value, indicated by ?param=FUZZ.
+    Parameter,
+}
+
 #[derive(Debug, Clone, ValueEnum)]
 pub enum HttpMethod {
     GET,
@@ -32,13 +42,40 @@ pub async fn perform_scan(
     exclude_exact_words: Option<Vec<usize>>,
     exclude_exact_chars: Option<Vec<usize>>,
     exclude_exact_lines: Option<Vec<usize>>,
+    fuzz_mode: &FuzzMode,
 ) -> Result<Option<url::Url>> {
-    let mut url_string = base_url.to_string();
-    if !url_string.ends_with('/') {
-        url_string.push('/');
+    let mut target_url = base_url.clone();
+
+    match fuzz_mode {
+        FuzzMode::Path => {
+            let mut url_string = base_url.to_string();
+            if !url_string.ends_with('/') {
+                url_string.push('/');
+            }
+            url_string.push_str(word);
+            target_url = url::Url::parse(&url_string)?;
+        }
+        FuzzMode::Subdomain => {
+            let base_host = base_url.host_str().ok_or_else(|| anyhow::anyhow!("Invalid base URL for subdomain fuzzing: no host"))?;
+            let fuzzed_host = base_host.replace("FUZZ", word);
+            target_url.set_host(Some(&fuzzed_host))?;
+        }
+        FuzzMode::Parameter => {
+            let mut query_pairs: Vec<(String, String)> = target_url.query_pairs().map(|(k, v)| (k.into_owned(), v.into_owned())).collect();
+            let mut found_fuzz = false;
+            for (_key, val) in query_pairs.iter_mut() {
+                if val.contains("FUZZ") {
+                    *val = val.replace("FUZZ", word);
+                    found_fuzz = true;
+                    break;
+                }
+            }
+            if !found_fuzz {
+                anyhow::bail!("FUZZ keyword not found in query parameters for parameter fuzzing.");
+            }
+            target_url.query_pairs_mut().clear().extend_pairs(query_pairs);
+        }
     }
-    url_string.push_str(word);
-    let target_url = url::Url::parse(&url_string)?;
 
     let res = match http_method {
         HttpMethod::GET => client.get(target_url.as_str()).send().await?,
@@ -176,6 +213,7 @@ pub async fn start_scan(
     exclude_exact_words: Option<Vec<usize>>,
     exclude_exact_chars: Option<Vec<usize>>,
     exclude_exact_lines: Option<Vec<usize>>,
+    fuzz_mode: FuzzMode,
 ) -> Result<()> {
     let scan_delay_for_loop = delay.clone();
     let scan_queue: Arc<Mutex<VecDeque<(url::Url, usize)>>> = Arc::new(Mutex::new(VecDeque::new()));
@@ -227,6 +265,7 @@ pub async fn start_scan(
             let exclude_exact_words_clone = exclude_exact_words.clone();
             let exclude_exact_chars_clone = exclude_exact_chars.clone();
             let exclude_exact_lines_clone = exclude_exact_lines.clone();
+            let fuzz_mode_clone = fuzz_mode.clone();
 
             join_set.spawn(async move {
                 let _permit = semaphore_clone
@@ -253,11 +292,12 @@ pub async fn start_scan(
                     exclude_exact_words_clone,
                     exclude_exact_chars_clone,
                     exclude_exact_lines_clone,
+                    &fuzz_mode_clone,
                 )
                 .await;
 
                 if let Ok(Some(found_url)) = result {
-                    if max_depth == 0 || current_depth < max_depth {
+                    if max_depth > 0 && current_depth < max_depth {
                         let mut visited = visited_urls_clone.lock().await;
                         if visited.insert(found_url.clone()) {
                             scan_queue_clone
@@ -331,6 +371,7 @@ mod tests {
             None, // exclude_exact_words
             None, // exclude_exact_chars
             None, // exclude_exact_lines
+            &crate::FuzzMode::Path,
         )
         .await;
         assert!(result.is_ok());
@@ -359,13 +400,14 @@ mod tests {
             &HttpMethod::GET,
             &None,
             &None,
+            None, // scan_delay
             None, // exact_words
             None, // exact_chars
             None, // exact_lines
-            None, // scan_delay
             None, // exclude_exact_words
             None, // exclude_exact_chars
             None, // exclude_exact_lines
+            &crate::FuzzMode::Path,
         )
         .await;
         assert!(result.is_ok()); // 404 is a valid HTTP response, not an error in reqwest
@@ -393,24 +435,24 @@ mod tests {
         let base_url = Url::parse(&format!("http://{}", addr)).unwrap();
         let (tx, _rx) = mpsc::channel(1);
 
-        let result = perform_scan(
-            &client,
-            &base_url,
-            "timeout",
-            tx,
-            &HttpMethod::GET,
-            &None,
-            &None,
-            None, // exact_words
-            None, // exact_chars
-            None, // exact_lines
-            None, // scan_delay
-            None, // exclude_exact_words
-            None, // exclude_exact_chars
-            None, // exclude_exact_lines
-        )
-        .await;
-        assert!(result.is_err());
+                        let result = perform_scan(
+                            &client,
+                            &base_url,
+                            "timeout",
+                            tx,
+                            &HttpMethod::GET,
+                            &None,
+                            &None,
+                            None, // exact_words
+                            None, // exact_chars
+                            None, // exact_lines
+                            None, // scan_delay
+                            None, // exclude_exact_words
+                            None, // exclude_exact_chars
+                            None, // exclude_exact_lines
+                            &crate::FuzzMode::Path,
+                        )
+                        .await;        assert!(result.is_err());
         let _err = result.unwrap_err(); // Fixed unused variable warning
     }
 
@@ -431,24 +473,24 @@ mod tests {
         let mut include_status = HashSet::new();
         include_status.insert(404);
 
-        let result = perform_scan(
-            &client,
-            &base_url,
-            "not_found",
-            tx,
-            &HttpMethod::GET,
-            &None,
-            &Some(include_status),
-            None, // exact_words
-            None, // exact_chars
-            None, // exact_lines
-            None, // scan_delay
-            None, // exclude_exact_words
-            None, // exclude_exact_chars
-            None, // exclude_exact_lines
-        )
-        .await;
-        assert!(result.is_ok());
+                        let result = perform_scan(
+                            &client,
+                            &base_url,
+                            "not_found",
+                            tx,
+                            &HttpMethod::GET,
+                            &None,
+                            &Some(include_status),
+                            None, // exact_words
+                            None, // exact_chars
+                            None, // exact_lines
+                            None, // scan_delay
+                            None, // exclude_exact_words
+                            None, // exclude_exact_chars
+                            None, // exclude_exact_lines
+                            &crate::FuzzMode::Path,
+                        )
+                        .await;        assert!(result.is_ok());
 
         // Ensure a message was sent for the 404 status
         let received_message = rx.recv().await.expect("Expected a message for 404 status");
@@ -473,24 +515,24 @@ mod tests {
         let base_url = Url::parse(&server.url("/").to_string()).unwrap();
         let (tx, mut rx) = mpsc::channel(1);
 
-        let result = perform_scan(
-            &client,
-            &base_url,
-            "not_found",
-            tx,
-            &HttpMethod::GET,
-            &None,
-            &None,
-            None, // exact_words
-            None, // exact_chars
-            None, // exact_lines
-            None, // scan_delay
-            None, // exclude_exact_words
-            None, // exclude_exact_chars
-            None, // exclude_exact_lines
-        )
-        .await;
-        assert!(result.is_ok());
+                        let result = perform_scan(
+                            &client,
+                            &base_url,
+                            "not_found",
+                            tx,
+                            &HttpMethod::GET,
+                            &None,
+                            &None,
+                            None, // exact_words
+                            None, // exact_chars
+                            None, // exact_lines
+                            None, // scan_delay
+                            None, // exclude_exact_words
+                            None, // exclude_exact_chars
+                            None, // exclude_exact_lines
+                            &crate::FuzzMode::Path,
+                        )
+                        .await;        assert!(result.is_ok());
 
         // Ensure no message was sent for the 404 status
         tokio::time::sleep(Duration::from_millis(10)).await; // Give some time for message to be sent if it were
@@ -560,6 +602,7 @@ mod start_scan_tests {
             None, // exclude_exact_words
             None, // exclude_exact_chars
             None, // exclude_exact_lines
+            crate::FuzzMode::Path,
         )
         .await
         .unwrap();
@@ -623,6 +666,7 @@ mod start_scan_tests {
             None, // exclude_exact_words
             None, // exclude_exact_chars
             None, // exclude_exact_lines
+            crate::FuzzMode::Path,
         )
         .await
         .unwrap();
