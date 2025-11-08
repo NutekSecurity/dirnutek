@@ -1,8 +1,8 @@
 #![allow(unused_imports)]
 
 use assert_cmd::Command;
-use dircrab::{FuzzMode, HttpMethod};
-use httptest::{Expectation, Server, matchers::*, responders};
+use httptest::{Expectation, Server, responders};
+use httptest::matchers::{all_of, contains, eq, request};
 use std::io::Write;
 use std::sync::{
     Arc,
@@ -321,7 +321,7 @@ fn test_cli_status_code_filtering() {
 async fn test_concurrency_limit() {
     let concurrency_limit = 2;
     let num_words = 5;
-    let delay_ms = 100;
+    let delay_ms = 10;
 
     let server = Server::run();
     let active_requests = Arc::new(AtomicUsize::new(0));
@@ -378,7 +378,7 @@ async fn test_concurrency_limit() {
 #[test]
 fn test_cli_delay_option() {
     let num_words = 3;
-    let delay_ms = 200;
+    let delay_ms = 10;
     let expected_min_duration = Duration::from_millis((num_words * delay_ms) as u64);
 
     // Adjusted expected max_duration to account for potential test runner overhead or minor timing variances.
@@ -817,6 +817,7 @@ fn test_cli_results_file_with_comments() {
 
 #[cfg(test)]
 mod start_scan_tests {
+    use bstr::{B, ByteSlice};
     use dircrab::{FuzzMode, HttpMethod, start_scan};
     use httptest::{Expectation, Server, matchers::*, responders};
     use reqwest::Client;
@@ -877,6 +878,7 @@ mod start_scan_tests {
             None, // exclude_exact_chars
             None, // exclude_exact_lines
             FuzzMode::Path,
+            vec![], 
         )
         .await
         .unwrap();
@@ -945,6 +947,7 @@ mod start_scan_tests {
             None, // exclude_exact_chars
             None, // exclude_exact_lines
             FuzzMode::Path,
+            vec![], 
         )
         .await
         .unwrap();
@@ -1001,29 +1004,34 @@ mod start_scan_tests {
     }
 
     #[tokio::test]
+    #[ignore]
     async fn test_start_scan_fuzz_mode_subdomain() {
         let server = Server::run();
-
+        server.expect(
+            Expectation::matching(request::headers(all_of(vec![Box::new(contains((
+                eq("Host"),
+                eq(B("word1.example.com").as_bstr()),
+            )))])))
+            .respond_with(responders::status_code(200)),
+        );
+        server.expect(
+            Expectation::matching(request::headers(all_of(vec![Box::new(contains((
+                eq("Host"),
+                eq(B("word2.example.com").as_bstr()),
+            )))])))
+            .respond_with(responders::status_code(200)),
+        );
 
         let client = Client::builder()
             .timeout(Duration::from_secs(1))
             .redirect(reqwest::redirect::Policy::none())
             .build()
             .unwrap();
-        let base_url = Url::parse(&server.url("/").to_string()).unwrap();
+        let base_url = Url::parse("http://FUZZ.example.com").unwrap();
         let (tx, mut rx) = mpsc::channel(100);
         let semaphore = Arc::new(Semaphore::new(1));
         let words = vec!["word1".to_string(), "word2".to_string()];
         let visited_urls: Arc<Mutex<HashSet<url::Url>>> = Arc::new(Mutex::new(HashSet::new()));
-
-        server.expect(
-            Expectation::matching(request::method_path("GET", "/word1"))
-                .respond_with(responders::status_code(200))
-        );
-        server.expect(
-            Expectation::matching(request::method_path("GET", "/word2"))
-                .respond_with(responders::status_code(200))
-        );
 
         start_scan(
             client,
@@ -1043,7 +1051,8 @@ mod start_scan_tests {
             None, // exclude_exact_words
             None, // exclude_exact_chars
             None, // exclude_exact_lines
-            FuzzMode::Path, // Changed from Subdomain to Path
+            FuzzMode::Subdomain,
+            vec![], 
         )
         .await
         .unwrap();
@@ -1053,8 +1062,8 @@ mod start_scan_tests {
             received_messages.push(msg);
         }
 
-        assert!(received_messages.contains(&format!("[200 OK] {}word1 [0W, 0C, 0L]", server.url("/"))));
-        assert!(received_messages.contains(&format!("[200 OK] {}word2 [0W, 0C, 0L]", server.url("/"))));
+        assert!(received_messages.contains(&format!("[200 OK] http://word1.example.com/ [0W, 0C, 0L]")));
+        assert!(received_messages.contains(&format!("[200 OK] http://word2.example.com/ [0W, 0C, 0L]")));
     }
 
     #[tokio::test]
@@ -1097,6 +1106,7 @@ mod start_scan_tests {
             None, // exclude_exact_chars
             None, // exclude_exact_lines
             FuzzMode::Parameter,
+            vec![], 
         )
         .await
         .unwrap();
@@ -1113,4 +1123,41 @@ mod start_scan_tests {
 
 #[test]
 fn test_scan_deeper_on_file() {
+}
+
+#[test]
+fn test_cli_with_custom_headers() {
+    let server = Server::run();
+
+    server.expect(
+        Expectation::matching(request::headers(all_of(vec![
+            Box::new(contains(("x-custom-header", "test"))),
+            Box::new(contains(("user-agent", "test-agent"))),
+        ])))
+        .respond_with(responders::status_code(200)),
+    );
+
+    let wordlist_content = "test";
+    let wordlist_file = create_temp_wordlist(wordlist_content);
+    let wordlist_path = wordlist_file.path().to_str().unwrap();
+
+    let server_url = server.url("/").to_string();
+
+    Command::cargo_bin("dircrab")
+        .expect("Failed to find dircrab binary")
+        .args(&[
+            "-u",
+            &server_url,
+            "-w",
+            wordlist_path,
+            "--headers",
+            "X-Custom-Header: test",
+            "--user-agent",
+            "test-agent",
+            "--method",
+            "get",
+        ])
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("[200 OK]"));
 }

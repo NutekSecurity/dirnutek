@@ -46,6 +46,7 @@ async fn test_filter_by_exact_word_count() {
         None,    // exclude_exact_chars
         None,    // exclude_exact_lines
         FuzzMode::Path,
+        vec![],
     )
     .await
     .unwrap();
@@ -97,6 +98,7 @@ async fn test_filter_by_exact_word_count_no_match() {
         None,    // exclude_exact_chars
         None,    // exclude_exact_lines
         FuzzMode::Path,
+        vec![],
     )
     .await
     .unwrap();
@@ -148,6 +150,7 @@ async fn test_filter_by_exact_char_count() {
         None,    // exclude_exact_chars
         None,    // exclude_exact_lines
         FuzzMode::Path,
+        vec![],
     )
     .await
     .unwrap();
@@ -199,6 +202,7 @@ async fn test_filter_by_exact_char_count_no_match() {
         None,    // exclude_exact_chars
         None,    // exclude_exact_lines
         FuzzMode::Path,
+        vec![],
     )
     .await
     .unwrap();
@@ -250,6 +254,7 @@ async fn test_filter_by_exact_line_count() {
         None,    // exclude_exact_chars
         None,    // exclude_exact_lines
         FuzzMode::Path,
+        vec![],
     )
     .await
     .unwrap();
@@ -301,6 +306,7 @@ async fn test_filter_by_exact_line_count_no_match() {
         None,    // exclude_exact_chars
         None,    // exclude_exact_lines
         FuzzMode::Path,
+        vec![],
     )
     .await
     .unwrap();
@@ -365,6 +371,7 @@ async fn test_filter_by_exact_combined() {
         None,    // exclude_exact_chars
         None,    // exclude_exact_lines
         FuzzMode::Path,
+        vec![],
     )
     .await
     .unwrap();
@@ -430,6 +437,7 @@ async fn test_filter_by_exclude_exact_word_count() {
         None,    // exclude_exact_chars
         None,    // exclude_exact_lines
         FuzzMode::Path,
+        vec![],
     )
     .await
     .unwrap();
@@ -481,6 +489,7 @@ async fn test_filter_by_exclude_exact_char_count() {
         Some(vec![3]), // exclude_exact_chars (should exclude "three_chars")
         None,    // exclude_exact_lines
         FuzzMode::Path,
+        vec![],
     )
     .await
     .unwrap();
@@ -532,6 +541,7 @@ async fn test_filter_by_exclude_exact_line_count() {
         None,    // exclude_exact_chars
         Some(vec![2]), // exclude_exact_lines (should exclude "two_lines")
         FuzzMode::Path,
+        vec![],
     )
     .await
     .unwrap();
@@ -596,6 +606,7 @@ async fn test_filter_by_exclude_exact_combined() {
         Some(vec![3]), // exclude_exact_chars
         Some(vec![2]), // exclude_exact_lines
         FuzzMode::Path,
+        vec![],
     )
     .await
     .unwrap();
@@ -609,4 +620,52 @@ async fn test_filter_by_exclude_exact_combined() {
     assert!(!received_messages.iter().any(|msg| msg.contains("exclude_words")));
     assert!(!received_messages.iter().any(|msg| msg.contains("exclude_chars")));
     assert!(!received_messages.iter().any(|msg| msg.contains("exclude_lines")));
+}
+
+#[tokio::test]
+async fn test_start_scan_with_custom_headers() {
+    let server = Server::run();
+    server.expect(
+        Expectation::matching(request::headers(contains(("x-custom-header", "test"))))
+            .respond_with(responders::status_code(200)),
+    );
+
+    let client = Client::builder().build().unwrap();
+    let base_url = Url::parse(&server.url("/").to_string()).unwrap();
+    let (tx, mut rx) = mpsc::channel(100);
+    let semaphore = Arc::new(Semaphore::new(1));
+    let words = vec!["test".to_string()];
+    let visited_urls: Arc<Mutex<HashSet<url::Url>>> = Arc::new(Mutex::new(HashSet::new()));
+    let headers = vec!["X-Custom-Header: test".to_string()];
+
+    start_scan(
+        client,
+        base_url,
+        words,
+        tx,
+        semaphore,
+        visited_urls.clone(),
+        HttpMethod::GET,
+        None,
+        None,
+        0,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        FuzzMode::Path,
+        headers,
+    )
+    .await
+    .unwrap();
+
+    let mut received_messages = Vec::new();
+    while let Some(msg) = rx.recv().await {
+        received_messages.push(msg);
+    }
+
+    assert!(received_messages.iter().any(|msg| msg.contains("[200 OK]")));
 }

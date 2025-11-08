@@ -37,7 +37,7 @@ This phase focuses on expanding the fuzzer's capabilities to handle more complex
             *   **Example:** `dircrab -u "http://FUZZ.example.com" -w subdomains.txt`
     *   **CLI:** The `-u` flag will be enhanced to detect the `FUZZ` keyword and adapt the fuzzing strategy accordingly.
 
-*   **[TO DO] Custom Headers & Authentication:**
+*   ✅ **Custom Headers & Authentication:**
     *   **Goal:** Enable scanning of authenticated endpoints and fuzzing of header values.
     *   **Implementation:**
         *   Add a `-H, --header` flag that can be specified multiple times.

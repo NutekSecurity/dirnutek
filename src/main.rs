@@ -100,6 +100,12 @@ struct Cli {
     #[arg(long, default_value = "dircrab/0.1.0")]
     user_agent: String,
 
+    /// Custom headers to add to requests (e.g., "Authorization: Bearer <TOKEN>").
+    /// Can be specified multiple times. If 'FUZZ' is present in the header value,
+    /// it will be replaced by words from the wordlist.
+    #[arg(short = 'H', long, value_name = "HEADER")]
+    headers: Vec<String>,
+
     /// Filter: Exact word count(s) in response body (comma-separated)
     #[arg(long, value_delimiter = ',')]
     exact_words: Option<Vec<usize>>,
@@ -297,6 +303,7 @@ async fn main() -> Result<()> {
             cli.exclude_exact_chars.clone(),
             cli.exclude_exact_lines.clone(),
             fuzz_mode,
+            cli.headers.clone(),
         )
         .await?;
     }

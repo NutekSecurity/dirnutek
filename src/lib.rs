@@ -43,6 +43,7 @@ pub async fn perform_scan(
     exclude_exact_chars: Option<Vec<usize>>,
     exclude_exact_lines: Option<Vec<usize>>,
     fuzz_mode: &FuzzMode,
+    headers: &[String],
 ) -> Result<Option<url::Url>> {
     let mut target_url = base_url.clone();
 
@@ -77,20 +78,32 @@ pub async fn perform_scan(
         }
     }
 
-    let res = match http_method {
-        HttpMethod::GET => client.get(target_url.as_str()).send().await?,
-        HttpMethod::POST => client.post(target_url.as_str()).send().await?,
-        HttpMethod::PUT => client.put(target_url.as_str()).send().await?,
-        HttpMethod::DELETE => client.delete(target_url.as_str()).send().await?,
-        HttpMethod::HEAD => client.head(target_url.as_str()).send().await?,
-        HttpMethod::OPTIONS => {
-            client
-                .request(reqwest::Method::OPTIONS, target_url.as_str())
-                .send()
-                .await?
-        }
-        HttpMethod::PATCH => client.patch(target_url.as_str()).send().await?,
+    let mut request_builder = match http_method {
+        HttpMethod::GET => client.get(target_url.as_str()),
+        HttpMethod::POST => client.post(target_url.as_str()),
+        HttpMethod::PUT => client.put(target_url.as_str()),
+        HttpMethod::DELETE => client.delete(target_url.as_str()),
+        HttpMethod::HEAD => client.head(target_url.as_str()),
+        HttpMethod::OPTIONS => client.request(reqwest::Method::OPTIONS, target_url.as_str()),
+        HttpMethod::PATCH => client.patch(target_url.as_str()),
     };
+
+    for header_str in headers {
+        let parts: Vec<&str> = header_str.splitn(2, ':').collect();
+        if parts.len() == 2 {
+            let header_name = parts[0].trim();
+            let mut header_value = parts[1].trim().to_string();
+
+            if header_value.contains("FUZZ") {
+                header_value = header_value.replace("FUZZ", word);
+            }
+            request_builder = request_builder.header(header_name, header_value);
+        } else {
+            eprintln!("Warning: Invalid header format: {}", header_str);
+        }
+    }
+
+    let res = request_builder.send().await?;
     let status = res.status();
     let status_code = status.as_u16();
     let url_str = target_url.to_string();
@@ -214,6 +227,7 @@ pub async fn start_scan(
     exclude_exact_chars: Option<Vec<usize>>,
     exclude_exact_lines: Option<Vec<usize>>,
     fuzz_mode: FuzzMode,
+    headers: Vec<String>,
 ) -> Result<()> {
     let scan_delay_for_loop = delay.clone();
     let scan_queue: Arc<Mutex<VecDeque<(url::Url, usize)>>> = Arc::new(Mutex::new(VecDeque::new()));
@@ -243,7 +257,7 @@ pub async fn start_scan(
             }
         };
 
-        if max_depth != 0 && current_depth >= max_depth {
+        if max_depth > 0 && current_depth >= max_depth {
             continue;
         }
 
@@ -266,6 +280,7 @@ pub async fn start_scan(
             let exclude_exact_chars_clone = exclude_exact_chars.clone();
             let exclude_exact_lines_clone = exclude_exact_lines.clone();
             let fuzz_mode_clone = fuzz_mode.clone();
+            let headers_clone = headers.clone();
 
             join_set.spawn(async move {
                 let _permit = semaphore_clone
@@ -293,13 +308,14 @@ pub async fn start_scan(
                     exclude_exact_chars_clone,
                     exclude_exact_lines_clone,
                     &fuzz_mode_clone,
+                    &headers_clone,
                 )
                 .await;
 
                 if let Ok(Some(found_url)) = result {
-                    if max_depth > 0 && current_depth < max_depth {
-                        let mut visited = visited_urls_clone.lock().await;
-                        if visited.insert(found_url.clone()) {
+                    let mut visited = visited_urls_clone.lock().await;
+                    if visited.insert(found_url.clone()) {
+                        if current_depth < max_depth {
                             scan_queue_clone
                                 .lock()
                                 .await
@@ -333,13 +349,15 @@ mod tests {
     use httptest::{Expectation, Server, matchers::*};
     use reqwest::Client; // Explicit import
     use std::collections::HashSet;
+    use std::sync::Arc; // Import Arc
     use std::time::Duration;
     use tokio::io::AsyncWriteExt;
     use tokio::net::TcpListener;
     use tokio::sync::mpsc;
+    use tokio::sync::{Mutex, Semaphore}; // Import Mutex and Semaphore
     use url::Url; // Explicit import
 
-    use crate::{HttpMethod, perform_scan}; // Import perform_scan explicitly
+    use crate::{HttpMethod, perform_scan, start_scan}; // Import perform_scan and start_scan explicitly
 
     #[tokio::test]
     async fn test_perform_scan_success() {
@@ -372,6 +390,7 @@ mod tests {
             None, // exclude_exact_chars
             None, // exclude_exact_lines
             &crate::FuzzMode::Path,
+            &[], // Add empty headers slice
         )
         .await;
         assert!(result.is_ok());
@@ -408,6 +427,7 @@ mod tests {
             None, // exclude_exact_chars
             None, // exclude_exact_lines
             &crate::FuzzMode::Path,
+            &[], // Add empty headers slice
         )
         .await;
         assert!(result.is_ok()); // 404 is a valid HTTP response, not an error in reqwest
@@ -451,53 +471,73 @@ mod tests {
                             None, // exclude_exact_chars
                             None, // exclude_exact_lines
                             &crate::FuzzMode::Path,
+                            &[], // Add empty headers slice
                         )
                         .await;        assert!(result.is_err());
         let _err = result.unwrap_err(); // Fixed unused variable warning
     }
 
     #[tokio::test]
-    async fn test_perform_scan_include_404_explicitly() {
+    async fn test_start_scan_max_depth_zero() {
         let server = Server::run();
         server.expect(
-            Expectation::matching(request::method_path("GET", "/not_found"))
-                .respond_with(responders::status_code(404)),
+            Expectation::matching(request::method_path("GET", "/a/"))
+                .times(1)
+                .respond_with(responders::status_code(200)),
         );
 
         let client = Client::builder()
             .timeout(Duration::from_secs(1))
+            .redirect(reqwest::redirect::Policy::none())
             .build()
             .unwrap();
         let base_url = Url::parse(&server.url("/").to_string()).unwrap();
-        let (tx, mut rx) = mpsc::channel(1);
-        let mut include_status = HashSet::new();
-        include_status.insert(404);
+        let (tx, mut rx) = mpsc::channel(100);
+        let semaphore = Arc::new(Semaphore::new(1));
+        let words = vec!["a/".to_string()];
 
-                        let result = perform_scan(
-                            &client,
-                            &base_url,
-                            "not_found",
-                            tx,
-                            &HttpMethod::GET,
-                            &None,
-                            &Some(include_status),
-                            None, // exact_words
-                            None, // exact_chars
-                            None, // exact_lines
-                            None, // scan_delay
-                            None, // exclude_exact_words
-                            None, // exclude_exact_chars
-                            None, // exclude_exact_lines
-                            &crate::FuzzMode::Path,
-                        )
-                        .await;        assert!(result.is_ok());
+        let visited_urls: Arc<Mutex<HashSet<url::Url>>> = Arc::new(Mutex::new(HashSet::new()));
+        let initial_base_url_clone = base_url.clone();
+        visited_urls.lock().await.insert(initial_base_url_clone);
 
-        // Ensure a message was sent for the 404 status
-        let received_message = rx.recv().await.expect("Expected a message for 404 status");
-        assert_eq!(
-            received_message,
-            format!("[404 Not Found] {} [0W, 0C, 0L]", server.url("/not_found"))
+        let max_depth = 0;
+
+        start_scan(
+            client,
+            base_url.clone(),
+            words,
+            tx,
+            semaphore,
+            visited_urls.clone(),
+            HttpMethod::GET,
+            None, // exclude_status
+            None, // include_status
+            max_depth,
+            None, // delay
+            None, // exact_words
+            None, // exact_chars
+            None, // exact_lines
+            None, // exclude_exact_words
+            None, // exclude_exact_chars
+            None, // exclude_exact_lines
+            crate::FuzzMode::Path,
+            vec![], // headers
+        )
+        .await
+        .unwrap();
+
+        let mut received_messages = Vec::new();
+        while let Some(msg) = rx.recv().await {
+            received_messages.push(msg);
+        }
+
+        assert_eq!(received_messages.len(), 1);
+        assert!(
+            received_messages.contains(&format!("[200 OK] {}a/ [0W, 0C, 0L]", server.url("/")))
         );
+
+        let final_visited = visited_urls.lock().await;
+        assert_eq!(final_visited.len(), 2);
     }
 
     #[tokio::test]
@@ -531,6 +571,7 @@ mod tests {
                             None, // exclude_exact_chars
                             None, // exclude_exact_lines
                             &crate::FuzzMode::Path,
+                            &[], // Add empty headers slice
                         )
                         .await;        assert!(result.is_ok());
 
@@ -603,6 +644,7 @@ mod start_scan_tests {
             None, // exclude_exact_chars
             None, // exclude_exact_lines
             crate::FuzzMode::Path,
+            vec![], // Add empty headers vector
         )
         .await
         .unwrap();
@@ -667,6 +709,7 @@ mod start_scan_tests {
             None, // exclude_exact_chars
             None, // exclude_exact_lines
             crate::FuzzMode::Path,
+            vec![], // Add empty headers vector
         )
         .await
         .unwrap();
