@@ -859,6 +859,8 @@ mod start_scan_tests {
         ];
         let visited_urls: Arc<Mutex<HashSet<url::Url>>> = Arc::new(Mutex::new(HashSet::new()));
 
+        let max_depth = 1; // max_depth = 1 (no recursion)
+
         start_scan(
             client,
             base_url,
@@ -869,7 +871,7 @@ mod start_scan_tests {
             HttpMethod::GET,
             None, // exclude_status
             None, // include_status
-            1,    // max_depth = 1 (no recursion)
+            max_depth,
             None, // delay
             None, // exact_words
             None, // exact_chars
@@ -878,7 +880,8 @@ mod start_scan_tests {
             None, // exclude_exact_chars
             None, // exclude_exact_lines
             FuzzMode::Path,
-            vec![], 
+            vec![], // headers
+            None, // data
         )
         .await
         .unwrap();
@@ -947,7 +950,8 @@ mod start_scan_tests {
             None, // exclude_exact_chars
             None, // exclude_exact_lines
             FuzzMode::Path,
-            vec![], 
+            vec![], // headers
+            None, // data
         )
         .await
         .unwrap();
@@ -1052,7 +1056,8 @@ mod start_scan_tests {
             None, // exclude_exact_chars
             None, // exclude_exact_lines
             FuzzMode::Subdomain,
-            vec![], 
+            vec![], // headers
+            None, // data
         )
         .await
         .unwrap();
@@ -1106,7 +1111,8 @@ mod start_scan_tests {
             None, // exclude_exact_chars
             None, // exclude_exact_lines
             FuzzMode::Parameter,
-            vec![], 
+            vec![], // headers
+            None, // data
         )
         .await
         .unwrap();

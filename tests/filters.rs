@@ -47,6 +47,7 @@ async fn test_filter_by_exact_word_count() {
         None,    // exclude_exact_lines
         FuzzMode::Path,
         vec![],
+        None, // data
     )
     .await
     .unwrap();
@@ -99,6 +100,7 @@ async fn test_filter_by_exact_word_count_no_match() {
         None,    // exclude_exact_lines
         FuzzMode::Path,
         vec![],
+        None, // data
     )
     .await
     .unwrap();
@@ -151,6 +153,7 @@ async fn test_filter_by_exact_char_count() {
         None,    // exclude_exact_lines
         FuzzMode::Path,
         vec![],
+        None, // data
     )
     .await
     .unwrap();
@@ -203,6 +206,7 @@ async fn test_filter_by_exact_char_count_no_match() {
         None,    // exclude_exact_lines
         FuzzMode::Path,
         vec![],
+        None, // data
     )
     .await
     .unwrap();
@@ -255,6 +259,7 @@ async fn test_filter_by_exact_line_count() {
         None,    // exclude_exact_lines
         FuzzMode::Path,
         vec![],
+        None, // data
     )
     .await
     .unwrap();
@@ -307,6 +312,7 @@ async fn test_filter_by_exact_line_count_no_match() {
         None,    // exclude_exact_lines
         FuzzMode::Path,
         vec![],
+        None, // data
     )
     .await
     .unwrap();
@@ -372,6 +378,7 @@ async fn test_filter_by_exact_combined() {
         None,    // exclude_exact_lines
         FuzzMode::Path,
         vec![],
+        None, // data
     )
     .await
     .unwrap();
@@ -438,6 +445,7 @@ async fn test_filter_by_exclude_exact_word_count() {
         None,    // exclude_exact_lines
         FuzzMode::Path,
         vec![],
+        None, // data
     )
     .await
     .unwrap();
@@ -490,6 +498,7 @@ async fn test_filter_by_exclude_exact_char_count() {
         None,    // exclude_exact_lines
         FuzzMode::Path,
         vec![],
+        None, // data
     )
     .await
     .unwrap();
@@ -542,6 +551,7 @@ async fn test_filter_by_exclude_exact_line_count() {
         Some(vec![2]), // exclude_exact_lines (should exclude "two_lines")
         FuzzMode::Path,
         vec![],
+        None, // data
     )
     .await
     .unwrap();
@@ -607,6 +617,7 @@ async fn test_filter_by_exclude_exact_combined() {
         Some(vec![2]), // exclude_exact_lines
         FuzzMode::Path,
         vec![],
+        None, // data
     )
     .await
     .unwrap();
@@ -658,6 +669,7 @@ async fn test_start_scan_with_custom_headers() {
         None,
         FuzzMode::Path,
         headers,
+        None, // data
     )
     .await
     .unwrap();
