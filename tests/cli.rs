@@ -1,8 +1,8 @@
 #![allow(unused_imports)]
 
 use assert_cmd::Command;
-use httptest::{Expectation, Server, responders};
 use httptest::matchers::{all_of, contains, eq, request};
+use httptest::{Expectation, Server, responders};
 use std::io::Write;
 use std::sync::{
     Arc,
@@ -44,7 +44,10 @@ fn test_cli_valid_args() {
         .assert()
         .success()
         .stdout(predicates::str::contains("URL: http://example.com/"))
-        .stdout(predicates::str::contains(format!("Wordlist: {}", wordlist_path)))
+        .stdout(predicates::str::contains(format!(
+            "Wordlist: {}",
+            wordlist_path
+        )))
         .stdout(predicates::str::contains("Read 3 words from wordlist."));
 }
 
@@ -151,7 +154,10 @@ fn test_cli_output_formatting() {
         .assert()
         .success()
         .stdout(predicates::str::contains("URL: ".to_owned() + &server_url))
-        .stdout(predicates::str::contains(format!("Wordlist: {}", wordlist_path)))
+        .stdout(predicates::str::contains(format!(
+            "Wordlist: {}",
+            wordlist_path
+        )))
         .stdout(predicates::str::contains("Read 4 words from wordlist."))
         .get_output()
         .stdout
@@ -163,7 +169,7 @@ fn test_cli_output_formatting() {
     // Assertions for expected output
     assert!(stdout_str.contains(&("[200 OK] ".to_owned() + &server_url + "found [0W, 0C, 0L]")));
     assert!(stdout_str.contains(
-        &("[301 Moved Permanently] ".to_owned() 
+        &("[301 Moved Permanently] ".to_owned()
             + &server_url
             + "moved -> /new_location [0W, 0C, 0L]")
     ));
@@ -337,19 +343,18 @@ async fn test_concurrency_limit() {
         let max_active_requests_clone = max_active_requests.clone();
 
         server.expect(
-            Expectation::matching(request::method_path("GET", format!("/word{}", i)))
-                .respond_with(
-                    move || {
-                        let current_active = active_requests_clone.fetch_add(1, Ordering::SeqCst) + 1;
-                        max_active_requests_clone.fetch_max(current_active, Ordering::SeqCst);
+            Expectation::matching(request::method_path("GET", format!("/word{}", i))).respond_with(
+                move || {
+                    let current_active = active_requests_clone.fetch_add(1, Ordering::SeqCst) + 1;
+                    max_active_requests_clone.fetch_max(current_active, Ordering::SeqCst);
 
-                        // Simulate work
-                        std::thread::sleep(Duration::from_millis(delay_ms));
+                    // Simulate work
+                    std::thread::sleep(Duration::from_millis(delay_ms));
 
-                        active_requests_clone.fetch_sub(1, Ordering::SeqCst);
-                        responders::status_code(200)
-                    },
-                ),
+                    active_requests_clone.fetch_sub(1, Ordering::SeqCst);
+                    responders::status_code(200)
+                },
+            ),
         );
     }
 
@@ -619,7 +624,7 @@ fn test_cli_no_urls_provided() {
         .assert()
         .failure()
         .stderr(predicates::str::contains(
-            "Error: No URLs provided for scanning. Use --url, --urls-file, or --results-file."
+            "Error: No URLs provided for scanning. Use --url, --urls-file, or --results-file.",
         ));
 }
 
@@ -720,14 +725,21 @@ fn test_cli_unsupported_scheme() {
     Command::cargo_bin("dircrab")
         .expect("Failed to find dircrab binary")
         .args(&[
-            "--urls-file", urls_file_path,
-            "-w", wordlist_path,
-            "--method", "get",
+            "--urls-file",
+            urls_file_path,
+            "-w",
+            wordlist_path,
+            "--method",
+            "get",
         ])
         .assert()
         .success()
-        .stderr(predicates::str::contains("Warning: Could not parse URL 'ftp://ftp.example.com' from file. Skipping."))
-        .stdout(predicates::str::contains("Starting scan for URL: http://example.com/"));
+        .stderr(predicates::str::contains(
+            "Warning: Could not parse URL 'ftp://ftp.example.com' from file. Skipping.",
+        ))
+        .stdout(predicates::str::contains(
+            "Starting scan for URL: http://example.com/",
+        ));
 }
 
 #[test]
@@ -739,7 +751,8 @@ fn test_cli_urls_file_with_comments() {
     );
     let server_url = server.url("/").to_string();
 
-    let urls_content = format!("# This is a comment\n{}/\n# Another comment\nftp://ignored.com\n",
+    let urls_content = format!(
+        "# This is a comment\n{}/\n# Another comment\nftp://ignored.com\n",
         server_url.clone() + "test_url"
     );
     let urls_file = create_temp_urls_file(&urls_content);
@@ -780,7 +793,8 @@ fn test_cli_results_file_with_comments() {
     );
     let server_url = server.url("/").to_string();
 
-    let results_content = format!("# This is a comment in results\nFound URL: {}\n# Another comment in results\nInvalid URL: ftp://ignored.com\n",
+    let results_content = format!(
+        "# This is a comment in results\nFound URL: {}\n# Another comment in results\nInvalid URL: ftp://ignored.com\n",
         server_url.clone() + "test_result/"
     );
     let results_file = create_temp_urls_file(&results_content);
@@ -844,7 +858,7 @@ mod start_scan_tests {
                 .respond_with(responders::status_code(200)),
         );
 
-        let client = Client::builder() 
+        let client = Client::builder()
             .timeout(Duration::from_secs(1))
             .redirect(reqwest::redirect::Policy::none())
             .build()
@@ -881,7 +895,7 @@ mod start_scan_tests {
             None, // exclude_exact_lines
             FuzzMode::Path,
             vec![], // headers
-            None, // data
+            None,   // data
         )
         .await
         .unwrap();
@@ -939,25 +953,26 @@ mod start_scan_tests {
             semaphore,
             visited_urls.clone(),
             HttpMethod::GET,
-            None, // exclude_status
-            None, // include_status
+            None,      // exclude_status
+            None,      // include_status
             max_depth, // max_depth
-            None, // delay
-            None, // exact_words
-            None, // exact_chars
-            None, // exact_lines
-            None, // exclude_exact_words
-            None, // exclude_exact_chars
-            None, // exclude_exact_lines
+            None,      // delay
+            None,      // exact_words
+            None,      // exact_chars
+            None,      // exact_lines
+            None,      // exclude_exact_words
+            None,      // exclude_exact_chars
+            None,      // exclude_exact_lines
             FuzzMode::Path,
             vec![], // headers
-            None, // data
+            None,   // data
         )
         .await
         .unwrap();
 
         let mut received_messages = Vec::new();
-        for _ in 0..max_depth + 1 { // Expect messages for depth 0 and 1
+        for _ in 0..max_depth + 1 {
+            // Expect messages for depth 0 and 1
             if let Some(msg) = rx.recv().await {
                 received_messages.push(msg);
             } else {
@@ -1057,7 +1072,7 @@ mod start_scan_tests {
             None, // exclude_exact_lines
             FuzzMode::Subdomain,
             vec![], // headers
-            None, // data
+            None,   // data
         )
         .await
         .unwrap();
@@ -1067,18 +1082,24 @@ mod start_scan_tests {
             received_messages.push(msg);
         }
 
-        assert!(received_messages.contains(&format!("[200 OK] http://word1.example.com/ [0W, 0C, 0L]")));
-        assert!(received_messages.contains(&format!("[200 OK] http://word2.example.com/ [0W, 0C, 0L]")));
+        assert!(
+            received_messages.contains(&format!("[200 OK] http://word1.example.com/ [0W, 0C, 0L]"))
+        );
+        assert!(
+            received_messages.contains(&format!("[200 OK] http://word2.example.com/ [0W, 0C, 0L]"))
+        );
     }
 
     #[tokio::test]
     async fn test_start_scan_fuzz_mode_parameter() {
         let server = Server::run();
         server.expect(
-            Expectation::matching(request::query(eq("param=word1"))).respond_with(responders::status_code(200)),
+            Expectation::matching(request::query(eq("param=word1")))
+                .respond_with(responders::status_code(200)),
         );
         server.expect(
-            Expectation::matching(request::query(eq("param=word2"))).respond_with(responders::status_code(200)),
+            Expectation::matching(request::query(eq("param=word2")))
+                .respond_with(responders::status_code(200)),
         );
 
         let client = Client::builder()
@@ -1112,7 +1133,7 @@ mod start_scan_tests {
             None, // exclude_exact_lines
             FuzzMode::Parameter,
             vec![], // headers
-            None, // data
+            None,   // data
         )
         .await
         .unwrap();
@@ -1122,14 +1143,19 @@ mod start_scan_tests {
             received_messages.push(msg);
         }
 
-        assert!(received_messages.contains(&format!("[200 OK] {}?param=word1 [0W, 0C, 0L]", server.url("/"))));
-        assert!(received_messages.contains(&format!("[200 OK] {}?param=word2 [0W, 0C, 0L]", server.url("/"))));
+        assert!(received_messages.contains(&format!(
+            "[200 OK] {}?param=word1 [0W, 0C, 0L]",
+            server.url("/")
+        )));
+        assert!(received_messages.contains(&format!(
+            "[200 OK] {}?param=word2 [0W, 0C, 0L]",
+            server.url("/")
+        )));
     }
 }
 
 #[test]
-fn test_scan_deeper_on_file() {
-}
+fn test_scan_deeper_on_file() {}
 
 #[test]
 fn test_cli_with_custom_headers() {

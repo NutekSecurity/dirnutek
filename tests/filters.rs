@@ -36,15 +36,15 @@ async fn test_filter_by_exact_word_count() {
         visited_urls.clone(),
         HttpMethod::GET,
         None,
-        None,    // include_status
-        0,       // max_depth
-        None,    // delay
+        None,          // include_status
+        0,             // max_depth
+        None,          // delay
         Some(vec![3]), // exact_words
-        None,    // exact_chars
-        None,    // exact_lines
-        None,    // exclude_exact_words
-        None,    // exclude_exact_chars
-        None,    // exclude_exact_lines
+        None,          // exact_chars
+        None,          // exact_lines
+        None,          // exclude_exact_words
+        None,          // exclude_exact_chars
+        None,          // exclude_exact_lines
         FuzzMode::Path,
         vec![],
         None, // data
@@ -57,8 +57,16 @@ async fn test_filter_by_exact_word_count() {
         received_messages.push(msg);
     }
 
-    assert!(received_messages.iter().any(|msg| msg.contains("three_words")));
-    assert!(!received_messages.iter().any(|msg| msg.contains("four_words")));
+    assert!(
+        received_messages
+            .iter()
+            .any(|msg| msg.contains("three_words"))
+    );
+    assert!(
+        !received_messages
+            .iter()
+            .any(|msg| msg.contains("four_words"))
+    );
 }
 
 #[tokio::test]
@@ -89,15 +97,15 @@ async fn test_filter_by_exact_word_count_no_match() {
         visited_urls.clone(),
         HttpMethod::GET,
         None,
-        None,    // include_status
-        0,       // max_depth
-        None,    // delay
+        None,          // include_status
+        0,             // max_depth
+        None,          // delay
         Some(vec![5]), // exact_words (no match for 3 or 4 words)
-        None,    // exact_chars
-        None,    // exact_lines
-        None,    // exclude_exact_words
-        None,    // exclude_exact_chars
-        None,    // exclude_exact_lines
+        None,          // exact_chars
+        None,          // exact_lines
+        None,          // exclude_exact_words
+        None,          // exclude_exact_chars
+        None,          // exclude_exact_lines
         FuzzMode::Path,
         vec![],
         None, // data
@@ -110,8 +118,16 @@ async fn test_filter_by_exact_word_count_no_match() {
         received_messages.push(msg);
     }
 
-    assert!(!received_messages.iter().any(|msg| msg.contains("three_words")));
-    assert!(!received_messages.iter().any(|msg| msg.contains("four_words")));
+    assert!(
+        !received_messages
+            .iter()
+            .any(|msg| msg.contains("three_words"))
+    );
+    assert!(
+        !received_messages
+            .iter()
+            .any(|msg| msg.contains("four_words"))
+    );
 }
 
 #[tokio::test]
@@ -142,15 +158,15 @@ async fn test_filter_by_exact_char_count() {
         visited_urls.clone(),
         HttpMethod::GET,
         None,
-        None,    // include_status
-        0,       // max_depth
-        None,    // delay
-        None,    // exact_words
+        None,          // include_status
+        0,             // max_depth
+        None,          // delay
+        None,          // exact_words
         Some(vec![3]), // exact_chars
-        None,    // exact_lines
-        None,    // exclude_exact_words
-        None,    // exclude_exact_chars
-        None,    // exclude_exact_lines
+        None,          // exact_lines
+        None,          // exclude_exact_words
+        None,          // exclude_exact_chars
+        None,          // exclude_exact_lines
         FuzzMode::Path,
         vec![],
         None, // data
@@ -163,8 +179,16 @@ async fn test_filter_by_exact_char_count() {
         received_messages.push(msg);
     }
 
-    assert!(received_messages.iter().any(|msg| msg.contains("three_chars")));
-    assert!(!received_messages.iter().any(|msg| msg.contains("four_chars")));
+    assert!(
+        received_messages
+            .iter()
+            .any(|msg| msg.contains("three_chars"))
+    );
+    assert!(
+        !received_messages
+            .iter()
+            .any(|msg| msg.contains("four_chars"))
+    );
 }
 
 #[tokio::test]
@@ -195,15 +219,15 @@ async fn test_filter_by_exact_char_count_no_match() {
         visited_urls.clone(),
         HttpMethod::GET,
         None,
-        None,    // include_status
-        0,       // max_depth
-        None,    // delay
-        None,    // exact_words
+        None,          // include_status
+        0,             // max_depth
+        None,          // delay
+        None,          // exact_words
         Some(vec![5]), // exact_chars (no match for 3 or 4 chars)
-        None,    // exact_lines
-        None,    // exclude_exact_words
-        None,    // exclude_exact_chars
-        None,    // exclude_exact_lines
+        None,          // exact_lines
+        None,          // exclude_exact_words
+        None,          // exclude_exact_chars
+        None,          // exclude_exact_lines
         FuzzMode::Path,
         vec![],
         None, // data
@@ -216,8 +240,16 @@ async fn test_filter_by_exact_char_count_no_match() {
         received_messages.push(msg);
     }
 
-    assert!(!received_messages.iter().any(|msg| msg.contains("three_chars")));
-    assert!(!received_messages.iter().any(|msg| msg.contains("four_chars")));
+    assert!(
+        !received_messages
+            .iter()
+            .any(|msg| msg.contains("three_chars"))
+    );
+    assert!(
+        !received_messages
+            .iter()
+            .any(|msg| msg.contains("four_chars"))
+    );
 }
 
 #[tokio::test]
@@ -247,16 +279,16 @@ async fn test_filter_by_exact_line_count() {
         semaphore,
         visited_urls.clone(),
         HttpMethod::GET,
-        None,    // exclude_status
-        None,    // include_status
-        0,       // max_depth
-        None,    // delay
-        None,    // exact_words
-        None,    // exact_chars
+        None,          // exclude_status
+        None,          // include_status
+        0,             // max_depth
+        None,          // delay
+        None,          // exact_words
+        None,          // exact_chars
         Some(vec![2]), // exact_lines
-        None,    // exclude_exact_words
-        None,    // exclude_exact_chars
-        None,    // exclude_exact_lines
+        None,          // exclude_exact_words
+        None,          // exclude_exact_chars
+        None,          // exclude_exact_lines
         FuzzMode::Path,
         vec![],
         None, // data
@@ -269,8 +301,16 @@ async fn test_filter_by_exact_line_count() {
         received_messages.push(msg);
     }
 
-    assert!(received_messages.iter().any(|msg| msg.contains("two_lines")));
-    assert!(!received_messages.iter().any(|msg| msg.contains("three_lines")));
+    assert!(
+        received_messages
+            .iter()
+            .any(|msg| msg.contains("two_lines"))
+    );
+    assert!(
+        !received_messages
+            .iter()
+            .any(|msg| msg.contains("three_lines"))
+    );
 }
 
 #[tokio::test]
@@ -301,15 +341,15 @@ async fn test_filter_by_exact_line_count_no_match() {
         visited_urls.clone(),
         HttpMethod::GET,
         None,
-        None,    // include_status
-        0,       // max_depth
-        None,    // delay
-        None,    // exact_words
-        None,    // exact_chars
+        None,          // include_status
+        0,             // max_depth
+        None,          // delay
+        None,          // exact_words
+        None,          // exact_chars
         Some(vec![5]), // exact_lines (no match for 2 or 3 lines)
-        None,    // exclude_exact_words
-        None,    // exclude_exact_chars
-        None,    // exclude_exact_lines
+        None,          // exclude_exact_words
+        None,          // exclude_exact_chars
+        None,          // exclude_exact_lines
         FuzzMode::Path,
         vec![],
         None, // data
@@ -322,8 +362,16 @@ async fn test_filter_by_exact_line_count_no_match() {
         received_messages.push(msg);
     }
 
-    assert!(!received_messages.iter().any(|msg| msg.contains("two_lines")));
-    assert!(!received_messages.iter().any(|msg| msg.contains("three_lines")));
+    assert!(
+        !received_messages
+            .iter()
+            .any(|msg| msg.contains("two_lines"))
+    );
+    assert!(
+        !received_messages
+            .iter()
+            .any(|msg| msg.contains("three_lines"))
+    );
 }
 
 #[tokio::test]
@@ -367,15 +415,15 @@ async fn test_filter_by_exact_combined() {
         visited_urls.clone(),
         HttpMethod::GET,
         None,
-        None,    // include_status
-        0,       // max_depth
-        None,    // delay
-        Some(vec![6]), // exact_words
-        Some(vec![27]),  // exact_chars
+        None,           // include_status
+        0,              // max_depth
+        None,           // delay
+        Some(vec![6]),  // exact_words
+        Some(vec![27]), // exact_chars
         Some(vec![3]),  // exact_lines
-        None,    // exclude_exact_words
-        None,    // exclude_exact_chars
-        None,    // exclude_exact_lines
+        None,           // exclude_exact_words
+        None,           // exclude_exact_chars
+        None,           // exclude_exact_lines
         FuzzMode::Path,
         vec![],
         None, // data
@@ -434,15 +482,15 @@ async fn test_filter_by_exclude_exact_word_count() {
         visited_urls.clone(),
         HttpMethod::GET,
         None,
-        None,    // include_status
-        0,       // max_depth
-        None,    // delay
-        None,    // exact_words
-        None,    // exact_chars
-        None,    // exact_lines
+        None,          // include_status
+        0,             // max_depth
+        None,          // delay
+        None,          // exact_words
+        None,          // exact_chars
+        None,          // exact_lines
         Some(vec![3]), // exclude_exact_words (should exclude "three_words")
-        None,    // exclude_exact_chars
-        None,    // exclude_exact_lines
+        None,          // exclude_exact_chars
+        None,          // exclude_exact_lines
         FuzzMode::Path,
         vec![],
         None, // data
@@ -455,8 +503,16 @@ async fn test_filter_by_exclude_exact_word_count() {
         received_messages.push(msg);
     }
 
-    assert!(!received_messages.iter().any(|msg| msg.contains("three_words")));
-    assert!(received_messages.iter().any(|msg| msg.contains("four_words")));
+    assert!(
+        !received_messages
+            .iter()
+            .any(|msg| msg.contains("three_words"))
+    );
+    assert!(
+        received_messages
+            .iter()
+            .any(|msg| msg.contains("four_words"))
+    );
 }
 
 #[tokio::test]
@@ -487,15 +543,15 @@ async fn test_filter_by_exclude_exact_char_count() {
         visited_urls.clone(),
         HttpMethod::GET,
         None,
-        None,    // include_status
-        0,       // max_depth
-        None,    // delay
-        None,    // exact_words
-        None,    // exact_chars
-        None,    // exact_lines
-        None,    // exclude_exact_words
+        None,          // include_status
+        0,             // max_depth
+        None,          // delay
+        None,          // exact_words
+        None,          // exact_chars
+        None,          // exact_lines
+        None,          // exclude_exact_words
         Some(vec![3]), // exclude_exact_chars (should exclude "three_chars")
-        None,    // exclude_exact_lines
+        None,          // exclude_exact_lines
         FuzzMode::Path,
         vec![],
         None, // data
@@ -508,8 +564,16 @@ async fn test_filter_by_exclude_exact_char_count() {
         received_messages.push(msg);
     }
 
-    assert!(!received_messages.iter().any(|msg| msg.contains("three_chars")));
-    assert!(received_messages.iter().any(|msg| msg.contains("four_chars")));
+    assert!(
+        !received_messages
+            .iter()
+            .any(|msg| msg.contains("three_chars"))
+    );
+    assert!(
+        received_messages
+            .iter()
+            .any(|msg| msg.contains("four_chars"))
+    );
 }
 
 #[tokio::test]
@@ -540,14 +604,14 @@ async fn test_filter_by_exclude_exact_line_count() {
         visited_urls.clone(),
         HttpMethod::GET,
         None,
-        None,    // include_status
-        0,       // max_depth
-        None,    // delay
-        None,    // exact_words
-        None,    // exact_chars
-        None,    // exact_lines
-        None,    // exclude_exact_words
-        None,    // exclude_exact_chars
+        None,          // include_status
+        0,             // max_depth
+        None,          // delay
+        None,          // exact_words
+        None,          // exact_chars
+        None,          // exact_lines
+        None,          // exclude_exact_words
+        None,          // exclude_exact_chars
         Some(vec![2]), // exclude_exact_lines (should exclude "two_lines")
         FuzzMode::Path,
         vec![],
@@ -561,8 +625,16 @@ async fn test_filter_by_exclude_exact_line_count() {
         received_messages.push(msg);
     }
 
-    assert!(!received_messages.iter().any(|msg| msg.contains("two_lines")));
-    assert!(received_messages.iter().any(|msg| msg.contains("three_lines")));
+    assert!(
+        !received_messages
+            .iter()
+            .any(|msg| msg.contains("two_lines"))
+    );
+    assert!(
+        received_messages
+            .iter()
+            .any(|msg| msg.contains("three_lines"))
+    );
 }
 
 #[tokio::test]
@@ -606,12 +678,12 @@ async fn test_filter_by_exclude_exact_combined() {
         visited_urls.clone(),
         HttpMethod::GET,
         None,
-        None,    // include_status
-        0,       // max_depth
-        None,    // delay
-        None,    // exact_words
-        None,    // exact_chars
-        None,    // exact_lines
+        None,          // include_status
+        0,             // max_depth
+        None,          // delay
+        None,          // exact_words
+        None,          // exact_chars
+        None,          // exact_lines
         Some(vec![3]), // exclude_exact_words
         Some(vec![3]), // exclude_exact_chars
         Some(vec![2]), // exclude_exact_lines
@@ -627,10 +699,26 @@ async fn test_filter_by_exclude_exact_combined() {
         received_messages.push(msg);
     }
 
-    assert!(received_messages.iter().any(|msg| msg.contains("match_all")));
-    assert!(!received_messages.iter().any(|msg| msg.contains("exclude_words")));
-    assert!(!received_messages.iter().any(|msg| msg.contains("exclude_chars")));
-    assert!(!received_messages.iter().any(|msg| msg.contains("exclude_lines")));
+    assert!(
+        received_messages
+            .iter()
+            .any(|msg| msg.contains("match_all"))
+    );
+    assert!(
+        !received_messages
+            .iter()
+            .any(|msg| msg.contains("exclude_words"))
+    );
+    assert!(
+        !received_messages
+            .iter()
+            .any(|msg| msg.contains("exclude_chars"))
+    );
+    assert!(
+        !received_messages
+            .iter()
+            .any(|msg| msg.contains("exclude_lines"))
+    );
 }
 
 #[tokio::test]

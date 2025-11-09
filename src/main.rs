@@ -164,7 +164,10 @@ async fn main() -> Result<()> {
         // Check for supported schemes
         let scheme = parsed_url.scheme();
         if scheme != "http" && scheme != "https" {
-            anyhow::bail!("Unsupported URL scheme: {}. Only http and https are supported.", scheme);
+            anyhow::bail!(
+                "Unsupported URL scheme: {}. Only http and https are supported.",
+                scheme
+            );
         }
 
         let fuzz_mode = if url_str.contains("FUZZ") {
@@ -205,7 +208,10 @@ async fn main() -> Result<()> {
             if let Ok(item) = parse_url_and_fuzz_mode(trimmed_line) {
                 target_urls_with_modes.push(item);
             } else {
-                eprintln!("Warning: Could not parse URL '{}' from file. Skipping.", trimmed_line);
+                eprintln!(
+                    "Warning: Could not parse URL '{}' from file. Skipping.",
+                    trimmed_line
+                );
             }
         }
     }
@@ -231,7 +237,10 @@ async fn main() -> Result<()> {
                 if let Ok(item) = parse_url_and_fuzz_mode(url_str) {
                     target_urls_with_modes.push(item);
                 } else {
-                    eprintln!("Warning: Could not parse URL '{}' from results file. Skipping.", url_str);
+                    eprintln!(
+                        "Warning: Could not parse URL '{}' from results file. Skipping.",
+                        url_str
+                    );
                 }
             }
         }
@@ -289,7 +298,10 @@ async fn main() -> Result<()> {
     });
 
     for (base_url, fuzz_mode) in processed_urls_with_modes {
-        println!("# Starting scan for URL: {} (FuzzMode: {:?})", base_url, fuzz_mode);
+        println!(
+            "# Starting scan for URL: {} (FuzzMode: {:?})",
+            base_url, fuzz_mode
+        );
         start_scan(
             client.clone(), // Clone client for each scan
             base_url,

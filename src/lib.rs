@@ -58,12 +58,17 @@ pub async fn perform_scan(
             target_url = url::Url::parse(&url_string)?;
         }
         FuzzMode::Subdomain => {
-            let base_host = base_url.host_str().ok_or_else(|| anyhow::anyhow!("Invalid base URL for subdomain fuzzing: no host"))?;
+            let base_host = base_url.host_str().ok_or_else(|| {
+                anyhow::anyhow!("Invalid base URL for subdomain fuzzing: no host")
+            })?;
             let fuzzed_host = base_host.replace("FUZZ", word);
             target_url.set_host(Some(&fuzzed_host))?;
         }
         FuzzMode::Parameter => {
-            let mut query_pairs: Vec<(String, String)> = target_url.query_pairs().map(|(k, v)| (k.into_owned(), v.into_owned())).collect();
+            let mut query_pairs: Vec<(String, String)> = target_url
+                .query_pairs()
+                .map(|(k, v)| (k.into_owned(), v.into_owned()))
+                .collect();
             let mut found_fuzz = false;
             for (_key, val) in query_pairs.iter_mut() {
                 if val.contains("FUZZ") {
@@ -75,7 +80,10 @@ pub async fn perform_scan(
             if !found_fuzz {
                 anyhow::bail!("FUZZ keyword not found in query parameters for parameter fuzzing.");
             }
-            target_url.query_pairs_mut().clear().extend_pairs(query_pairs);
+            target_url
+                .query_pairs_mut()
+                .clear()
+                .extend_pairs(query_pairs);
         }
     }
 
@@ -401,7 +409,7 @@ mod tests {
             None, // exclude_exact_chars
             None, // exclude_exact_lines
             &crate::FuzzMode::Path,
-            &[], // Add empty headers slice
+            &[],   // Add empty headers slice
             &None, // Add data argument
         )
         .await;
@@ -439,7 +447,7 @@ mod tests {
             None, // exclude_exact_chars
             None, // exclude_exact_lines
             &crate::FuzzMode::Path,
-            &[], // Add empty headers slice
+            &[],   // Add empty headers slice
             &None, // Add data argument
         )
         .await;
@@ -468,26 +476,27 @@ mod tests {
         let base_url = Url::parse(&format!("http://{}", addr)).unwrap();
         let (tx, _rx) = mpsc::channel(1);
 
-                        let result = perform_scan(
-                            &client,
-                            &base_url,
-                            "timeout",
-                            tx,
-                            &HttpMethod::GET,
-                            &None,
-                            &None,
-                            None, // exact_words
-                            None, // exact_chars
-                            None, // exact_lines
-                            None, // scan_delay
-                            None, // exclude_exact_words
-                            None, // exclude_exact_chars
-                            None, // exclude_exact_lines
-                            &crate::FuzzMode::Path,
-                            &[], // Add empty headers slice
-                            &None, // Add data argument
-                        )
-                        .await;        assert!(result.is_err());
+        let result = perform_scan(
+            &client,
+            &base_url,
+            "timeout",
+            tx,
+            &HttpMethod::GET,
+            &None,
+            &None,
+            None, // exact_words
+            None, // exact_chars
+            None, // exact_lines
+            None, // scan_delay
+            None, // exclude_exact_words
+            None, // exclude_exact_chars
+            None, // exclude_exact_lines
+            &crate::FuzzMode::Path,
+            &[],   // Add empty headers slice
+            &None, // Add data argument
+        )
+        .await;
+        assert!(result.is_err());
         let _err = result.unwrap_err(); // Fixed unused variable warning
     }
 
@@ -536,7 +545,7 @@ mod tests {
             None, // exclude_exact_lines
             crate::FuzzMode::Path,
             vec![], // headers
-            None, // data
+            None,   // data
         )
         .await
         .unwrap();
@@ -570,26 +579,27 @@ mod tests {
         let base_url = Url::parse(&server.url("/").to_string()).unwrap();
         let (tx, mut rx) = mpsc::channel(1);
 
-                        let result = perform_scan(
-                            &client,
-                            &base_url,
-                            "not_found",
-                            tx,
-                            &HttpMethod::GET,
-                            &None,
-                            &None,
-                            None, // exact_words
-                            None, // exact_chars
-                            None, // exact_lines
-                            None, // scan_delay
-                            None, // exclude_exact_words
-                            None, // exclude_exact_chars
-                            None, // exclude_exact_lines
-                            &crate::FuzzMode::Path,
-                            &[], // Add empty headers slice
-                            &None, // Add data argument
-                        )
-                        .await;        assert!(result.is_ok());
+        let result = perform_scan(
+            &client,
+            &base_url,
+            "not_found",
+            tx,
+            &HttpMethod::GET,
+            &None,
+            &None,
+            None, // exact_words
+            None, // exact_chars
+            None, // exact_lines
+            None, // scan_delay
+            None, // exclude_exact_words
+            None, // exclude_exact_chars
+            None, // exclude_exact_lines
+            &crate::FuzzMode::Path,
+            &[],   // Add empty headers slice
+            &None, // Add data argument
+        )
+        .await;
+        assert!(result.is_ok());
 
         // Ensure no message was sent for the 404 status
         tokio::time::sleep(Duration::from_millis(10)).await; // Give some time for message to be sent if it were
@@ -661,7 +671,7 @@ mod start_scan_tests {
             None, // exclude_exact_lines
             crate::FuzzMode::Path,
             vec![], // Add empty headers vector
-            None, // data
+            None,   // data
         )
         .await
         .unwrap();
@@ -727,7 +737,7 @@ mod start_scan_tests {
             None, // exclude_exact_lines
             crate::FuzzMode::Path,
             vec![], // Add empty headers vector
-            None, // data
+            None,   // data
         )
         .await
         .unwrap();
