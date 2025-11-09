@@ -48,42 +48,48 @@ pub async fn perform_scan(
 ) -> Result<Option<url::Url>> {
     let mut target_url = base_url.clone();
 
-    match fuzz_mode {
-        FuzzMode::Path => {
-            let mut url_string = base_url.to_string();
-            if !url_string.ends_with('/') {
-                url_string.push('/');
-            }
-            url_string.push_str(word);
-            target_url = url::Url::parse(&url_string)?;
-        }
-        FuzzMode::Subdomain => {
-            let base_host = base_url.host_str().ok_or_else(|| {
-                anyhow::anyhow!("Invalid base URL for subdomain fuzzing: no host")
-            })?;
-            let fuzzed_host = base_host.replace("FUZZ", word);
-            target_url.set_host(Some(&fuzzed_host))?;
-        }
-        FuzzMode::Parameter => {
-            let mut query_pairs: Vec<(String, String)> = target_url
-                .query_pairs()
-                .map(|(k, v)| (k.into_owned(), v.into_owned()))
-                .collect();
-            let mut found_fuzz = false;
-            for (_key, val) in query_pairs.iter_mut() {
-                if val.contains("FUZZ") {
-                    *val = val.replace("FUZZ", word);
-                    found_fuzz = true;
-                    break;
+    // If it's a POST request with data, the word is for the body, not the URL path.
+    // So, we skip the URL fuzzing based on fuzz_mode.
+    if !matches!(http_method, HttpMethod::POST) || data.is_none() {
+        match fuzz_mode {
+            FuzzMode::Path => {
+                let mut url_string = base_url.to_string();
+                if !url_string.ends_with('/') {
+                    url_string.push('/');
                 }
+                url_string.push_str(word);
+                target_url = url::Url::parse(&url_string)?;
             }
-            if !found_fuzz {
-                anyhow::bail!("FUZZ keyword not found in query parameters for parameter fuzzing.");
+            FuzzMode::Subdomain => {
+                let base_host = base_url.host_str().ok_or_else(|| {
+                    anyhow::anyhow!("Invalid base URL for subdomain fuzzing: no host")
+                })?;
+                let fuzzed_host = base_host.replace("FUZZ", word);
+                target_url.set_host(Some(&fuzzed_host))?;
             }
-            target_url
-                .query_pairs_mut()
-                .clear()
-                .extend_pairs(query_pairs);
+            FuzzMode::Parameter => {
+                let mut query_pairs: Vec<(String, String)> = target_url
+                    .query_pairs()
+                    .map(|(k, v)| (k.into_owned(), v.into_owned()))
+                    .collect();
+                let mut found_fuzz = false;
+                for (_key, val) in query_pairs.iter_mut() {
+                    if val.contains("FUZZ") {
+                        *val = val.replace("FUZZ", word);
+                        found_fuzz = true;
+                        break;
+                    }
+                }
+                if !found_fuzz {
+                    anyhow::bail!(
+                        "FUZZ keyword not found in query parameters for parameter fuzzing."
+                    );
+                }
+                target_url
+                    .query_pairs_mut()
+                    .clear()
+                    .extend_pairs(query_pairs);
+            }
         }
     }
 
@@ -604,6 +610,52 @@ mod tests {
         // Ensure no message was sent for the 404 status
         tokio::time::sleep(Duration::from_millis(10)).await; // Give some time for message to be sent if it were
         assert!(rx.try_recv().is_err()); // Should be empty
+    }
+    #[tokio::test]
+    async fn test_perform_scan_post_data_fuzzing() {
+        let server = Server::run();
+        let expected_body = r#"{"username":"admin","password":"testword"}"#.to_string();
+        server.expect(
+            Expectation::matching(
+                httptest::matchers::all_of(vec![
+                    Box::new(request::method_path("POST", "/login")),
+                    Box::new(request::body(expected_body.clone())),
+                ])
+            )
+            .respond_with(responders::status_code(200)),
+        );
+
+        let client = Client::builder()
+            .timeout(Duration::from_secs(1))
+            .build()
+            .unwrap();
+        // Base URL for POST data fuzzing test
+        let base_url = Url::parse(&server.url("/login").to_string()).unwrap();
+        let (tx, _rx) = mpsc::channel(1);
+
+        let data_to_fuzz = Some(r#"{"username":"admin","password":"FUZZ"}"#.to_string());
+
+        let result = perform_scan(
+            &client,
+            &base_url,
+            "testword", // This will replace FUZZ
+            tx,
+            &HttpMethod::POST,
+            &None,
+            &None,
+            None, // scan_delay
+            None, // exact_words
+            None, // exact_chars
+            None, // exact_lines
+            None, // exclude_exact_words
+            None, // exclude_exact_chars
+            None, // exclude_exact_lines
+            &crate::FuzzMode::Path, // FuzzMode doesn't directly apply to data fuzzing, but is required
+            &[],   // Add empty headers slice
+            &data_to_fuzz, // Pass the data to fuzz
+        )
+        .await;
+        assert!(result.is_ok());
     }
 }
 
