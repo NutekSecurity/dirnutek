@@ -44,6 +44,7 @@ pub async fn perform_scan(
     exclude_exact_lines: Option<Vec<usize>>,
     fuzz_mode: &FuzzMode,
     headers: &[String],
+    data: &Option<String>,
 ) -> Result<Option<url::Url>> {
     let mut target_url = base_url.clone();
 
@@ -87,6 +88,13 @@ pub async fn perform_scan(
         HttpMethod::OPTIONS => client.request(reqwest::Method::OPTIONS, target_url.as_str()),
         HttpMethod::PATCH => client.patch(target_url.as_str()),
     };
+
+    if let HttpMethod::POST = http_method {
+        if let Some(body_data) = data {
+            let fuzzed_body = body_data.replace("FUZZ", word);
+            request_builder = request_builder.body(fuzzed_body);
+        }
+    }
 
     for header_str in headers {
         let parts: Vec<&str> = header_str.splitn(2, ':').collect();
@@ -228,6 +236,7 @@ pub async fn start_scan(
     exclude_exact_lines: Option<Vec<usize>>,
     fuzz_mode: FuzzMode,
     headers: Vec<String>,
+    data: Option<String>,
 ) -> Result<()> {
     let scan_delay_for_loop = delay.clone();
     let scan_queue: Arc<Mutex<VecDeque<(url::Url, usize)>>> = Arc::new(Mutex::new(VecDeque::new()));
@@ -281,6 +290,7 @@ pub async fn start_scan(
             let exclude_exact_lines_clone = exclude_exact_lines.clone();
             let fuzz_mode_clone = fuzz_mode.clone();
             let headers_clone = headers.clone();
+            let data_clone = data.clone();
 
             join_set.spawn(async move {
                 let _permit = semaphore_clone
@@ -309,6 +319,7 @@ pub async fn start_scan(
                     exclude_exact_lines_clone,
                     &fuzz_mode_clone,
                     &headers_clone,
+                    &data_clone,
                 )
                 .await;
 
@@ -391,6 +402,7 @@ mod tests {
             None, // exclude_exact_lines
             &crate::FuzzMode::Path,
             &[], // Add empty headers slice
+            &None, // Add data argument
         )
         .await;
         assert!(result.is_ok());
@@ -428,6 +440,7 @@ mod tests {
             None, // exclude_exact_lines
             &crate::FuzzMode::Path,
             &[], // Add empty headers slice
+            &None, // Add data argument
         )
         .await;
         assert!(result.is_ok()); // 404 is a valid HTTP response, not an error in reqwest
@@ -472,6 +485,7 @@ mod tests {
                             None, // exclude_exact_lines
                             &crate::FuzzMode::Path,
                             &[], // Add empty headers slice
+                            &None, // Add data argument
                         )
                         .await;        assert!(result.is_err());
         let _err = result.unwrap_err(); // Fixed unused variable warning
@@ -522,6 +536,7 @@ mod tests {
             None, // exclude_exact_lines
             crate::FuzzMode::Path,
             vec![], // headers
+            None, // data
         )
         .await
         .unwrap();
@@ -572,6 +587,7 @@ mod tests {
                             None, // exclude_exact_lines
                             &crate::FuzzMode::Path,
                             &[], // Add empty headers slice
+                            &None, // Add data argument
                         )
                         .await;        assert!(result.is_ok());
 
@@ -645,6 +661,7 @@ mod start_scan_tests {
             None, // exclude_exact_lines
             crate::FuzzMode::Path,
             vec![], // Add empty headers vector
+            None, // data
         )
         .await
         .unwrap();
@@ -710,6 +727,7 @@ mod start_scan_tests {
             None, // exclude_exact_lines
             crate::FuzzMode::Path,
             vec![], // Add empty headers vector
+            None, // data
         )
         .await
         .unwrap();

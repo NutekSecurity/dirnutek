@@ -47,7 +47,7 @@ This phase focuses on expanding the fuzzer's capabilities to handle more complex
             *   **Header Fuzzing:** `-H "X-Forwarded-For: FUZZ"`
     *   **CLI:** `-H, --header <HEADER>`. The application will need to parse these headers and add them to every request. If `FUZZ` is present in a header value, the fuzzer will iterate through the wordlist for that header.
 
-*   **[TO DO] POST Data Fuzzing:**
+*   ✅ **POST Data Fuzzing:**
     *   **Goal:** Fuzz the body of `POST` requests.
     *   **Implementation:**
         *   Add a `-d, --data` flag to specify the request body.

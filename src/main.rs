@@ -129,6 +129,12 @@ struct Cli {
     /// Filter: Exclude exact line count(s) in response body (comma-separated)
     #[arg(long, value_delimiter = ',')]
     exclude_exact_lines: Option<Vec<usize>>,
+
+    /// The request body for POST requests.
+    /// If the `FUZZ` keyword is present, it will be replaced by words from the wordlist.
+    /// Example: -d '{"username":"admin","password":"FUZZ"}'
+    #[arg(short, long, value_name = "DATA")]
+    data: Option<String>,
 }
 
 async fn read_wordlist(path: PathBuf) -> Result<Vec<String>, io::Error> {
@@ -304,6 +310,7 @@ async fn main() -> Result<()> {
             cli.exclude_exact_lines.clone(),
             fuzz_mode,
             cli.headers.clone(),
+            cli.data.clone(), // Pass the data argument
         )
         .await?;
     }
