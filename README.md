@@ -61,7 +61,7 @@ This phase focuses on expanding the fuzzer's capabilities to handle more complex
 
 This phase focuses on features that make `DirCrab` a professional-grade tool that can be integrated into larger security workflows.
 
-*   **[TO DO] Advanced Reporting:**
+*   ✅ **Advanced Reporting:**
     *   **Goal:** Provide machine-readable output formats for easy parsing and integration with other tools.
     *   **Implementation:**
         *   Add a `-o, --output <FILE>` flag to save results to a file.
@@ -72,7 +72,7 @@ This phase focuses on features that make `DirCrab` a professional-grade tool tha
         *   `csv`: For easy import into spreadsheets.
         *   `txt`: Plain text (default).
 
-*   **[TO DO] Session Management:**
+*   ✅ **Session Management:**
     *   **Goal:** Allow users to pause and resume long-running scans.
     *   **Implementation:**
         *   Periodically save the state of the scan (e.g., the current queue, visited URLs) to a state file.
