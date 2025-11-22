@@ -60,12 +60,12 @@ async fn test_filter_by_exact_word_count() {
     assert!(
         received_messages
             .iter()
-            .any(|msg| msg.contains("three_words"))
+            .any(|e| matches!(e, dircrab::ScanEvent::FoundUrl(s) if s.contains("three_words")))
     );
     assert!(
         !received_messages
             .iter()
-            .any(|msg| msg.contains("four_words"))
+            .any(|e| matches!(e, dircrab::ScanEvent::FoundUrl(s) if s.contains("four_words")))
     );
 }
 
@@ -121,12 +121,12 @@ async fn test_filter_by_exact_word_count_no_match() {
     assert!(
         !received_messages
             .iter()
-            .any(|msg| msg.contains("three_words"))
+            .any(|e| matches!(e, dircrab::ScanEvent::FoundUrl(s) if s.contains("three_words")))
     );
     assert!(
         !received_messages
             .iter()
-            .any(|msg| msg.contains("four_words"))
+            .any(|e| matches!(e, dircrab::ScanEvent::FoundUrl(s) if s.contains("four_words")))
     );
 }
 
@@ -182,12 +182,12 @@ async fn test_filter_by_exact_char_count() {
     assert!(
         received_messages
             .iter()
-            .any(|msg| msg.contains("three_chars"))
+            .any(|e| matches!(e, dircrab::ScanEvent::FoundUrl(s) if s.contains("three_chars")))
     );
     assert!(
         !received_messages
             .iter()
-            .any(|msg| msg.contains("four_chars"))
+            .any(|e| matches!(e, dircrab::ScanEvent::FoundUrl(s) if s.contains("four_chars")))
     );
 }
 
@@ -243,12 +243,12 @@ async fn test_filter_by_exact_char_count_no_match() {
     assert!(
         !received_messages
             .iter()
-            .any(|msg| msg.contains("three_chars"))
+            .any(|e| matches!(e, dircrab::ScanEvent::FoundUrl(s) if s.contains("three_chars")))
     );
     assert!(
         !received_messages
             .iter()
-            .any(|msg| msg.contains("four_chars"))
+            .any(|e| matches!(e, dircrab::ScanEvent::FoundUrl(s) if s.contains("four_chars")))
     );
 }
 
@@ -304,12 +304,12 @@ async fn test_filter_by_exact_line_count() {
     assert!(
         received_messages
             .iter()
-            .any(|msg| msg.contains("two_lines"))
+            .any(|e| matches!(e, dircrab::ScanEvent::FoundUrl(s) if s.contains("two_lines")))
     );
     assert!(
         !received_messages
             .iter()
-            .any(|msg| msg.contains("three_lines"))
+            .any(|e| matches!(e, dircrab::ScanEvent::FoundUrl(s) if s.contains("three_lines")))
     );
 }
 
@@ -365,12 +365,12 @@ async fn test_filter_by_exact_line_count_no_match() {
     assert!(
         !received_messages
             .iter()
-            .any(|msg| msg.contains("two_lines"))
+            .any(|e| matches!(e, dircrab::ScanEvent::FoundUrl(s) if s.contains("two_lines")))
     );
     assert!(
         !received_messages
             .iter()
-            .any(|msg| msg.contains("three_lines"))
+            .any(|e| matches!(e, dircrab::ScanEvent::FoundUrl(s) if s.contains("three_lines")))
     );
 }
 
@@ -436,21 +436,21 @@ async fn test_filter_by_exact_combined() {
         received_messages.push(msg);
     }
 
-    assert!(received_messages.iter().any(|msg| msg.contains("match")));
+    assert!(received_messages.iter().any(|e| matches!(e, dircrab::ScanEvent::FoundUrl(s) if s.contains("match"))));
     assert!(
         !received_messages
             .iter()
-            .any(|msg| msg.contains("no_match_words"))
+            .any(|e| matches!(e, dircrab::ScanEvent::FoundUrl(s) if s.contains("no_match_words")))
     );
     assert!(
         !received_messages
             .iter()
-            .any(|msg| msg.contains("no_match_chars"))
+            .any(|e| matches!(e, dircrab::ScanEvent::FoundUrl(s) if s.contains("no_match_chars")))
     );
     assert!(
         !received_messages
             .iter()
-            .any(|msg| msg.contains("no_match_lines"))
+            .any(|e| matches!(e, dircrab::ScanEvent::FoundUrl(s) if s.contains("no_match_lines")))
     );
 }
 
@@ -506,12 +506,12 @@ async fn test_filter_by_exclude_exact_word_count() {
     assert!(
         !received_messages
             .iter()
-            .any(|msg| msg.contains("three_words"))
+            .any(|e| matches!(e, dircrab::ScanEvent::FoundUrl(s) if s.contains("three_words")))
     );
     assert!(
         received_messages
             .iter()
-            .any(|msg| msg.contains("four_words"))
+            .any(|e| matches!(e, dircrab::ScanEvent::FoundUrl(s) if s.contains("four_words")))
     );
 }
 
@@ -567,12 +567,12 @@ async fn test_filter_by_exclude_exact_char_count() {
     assert!(
         !received_messages
             .iter()
-            .any(|msg| msg.contains("three_chars"))
+            .any(|e| matches!(e, dircrab::ScanEvent::FoundUrl(s) if s.contains("three_chars")))
     );
     assert!(
         received_messages
             .iter()
-            .any(|msg| msg.contains("four_chars"))
+            .any(|e| matches!(e, dircrab::ScanEvent::FoundUrl(s) if s.contains("four_chars")))
     );
 }
 
@@ -628,12 +628,12 @@ async fn test_filter_by_exclude_exact_line_count() {
     assert!(
         !received_messages
             .iter()
-            .any(|msg| msg.contains("two_lines"))
+            .any(|e| matches!(e, dircrab::ScanEvent::FoundUrl(s) if s.contains("two_lines")))
     );
     assert!(
         received_messages
             .iter()
-            .any(|msg| msg.contains("three_lines"))
+            .any(|e| matches!(e, dircrab::ScanEvent::FoundUrl(s) if s.contains("three_lines")))
     );
 }
 
@@ -702,22 +702,22 @@ async fn test_filter_by_exclude_exact_combined() {
     assert!(
         received_messages
             .iter()
-            .any(|msg| msg.contains("match_all"))
+            .any(|e| matches!(e, dircrab::ScanEvent::FoundUrl(s) if s.contains("match_all")))
     );
     assert!(
         !received_messages
             .iter()
-            .any(|msg| msg.contains("exclude_words"))
+            .any(|e| matches!(e, dircrab::ScanEvent::FoundUrl(s) if s.contains("exclude_words")))
     );
     assert!(
         !received_messages
             .iter()
-            .any(|msg| msg.contains("exclude_chars"))
+            .any(|e| matches!(e, dircrab::ScanEvent::FoundUrl(s) if s.contains("exclude_chars")))
     );
     assert!(
         !received_messages
             .iter()
-            .any(|msg| msg.contains("exclude_lines"))
+            .any(|e| matches!(e, dircrab::ScanEvent::FoundUrl(s) if s.contains("exclude_lines")))
     );
 }
 
@@ -767,5 +767,5 @@ async fn test_start_scan_with_custom_headers() {
         received_messages.push(msg);
     }
 
-    assert!(received_messages.iter().any(|msg| msg.contains("[200 OK]")));
+    assert!(received_messages.iter().any(|e| matches!(e, dircrab::ScanEvent::FoundUrl(s) if s.contains("[200 OK]"))));
 }

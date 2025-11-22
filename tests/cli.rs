@@ -906,13 +906,15 @@ mod start_scan_tests {
         }
 
         assert!(
-            received_messages.contains(&format!("[200 OK] {} [0W, 0C, 0L]", server.url("/admin/")))
+            received_messages.iter().any(|e| matches!(e, dircrab::ScanEvent::FoundUrl(s) if s == &format!("[200 OK] {} [0W, 0C, 0L]", server.url("/admin/"))))
         );
         assert!(
-            received_messages.contains(&format!("[200 OK] {} [0W, 0C, 0L]", server.url("/test")))
+            received_messages.iter().any(|e| matches!(e, dircrab::ScanEvent::FoundUrl(s) if s == &format!("[200 OK] {} [0W, 0C, 0L]", server.url("/test"))))
         );
         // Should not contain /admin/users as recursion depth is 1
-        assert!(!received_messages.contains(&format!("[200 OK] {}", server.url("/admin/users"))));
+        assert!(
+            !received_messages.iter().any(|e| matches!(e, dircrab::ScanEvent::FoundUrl(s) if s == &format!("[200 OK] {}", server.url("/admin/users"))))
+        );
     }
 
     #[tokio::test]
@@ -970,28 +972,25 @@ mod start_scan_tests {
         .await
         .unwrap();
 
-        let mut received_messages = Vec::new();
-        for _ in 0..max_depth + 1 {
-            // Expect messages for depth 0 and 1
-            if let Some(msg) = rx.recv().await {
-                received_messages.push(msg);
-            } else {
-                break;
+        let mut received_found_urls = Vec::new();
+        // Consume all events until ScanFinished
+        while let Some(msg) = rx.recv().await {
+            if let dircrab::ScanEvent::FoundUrl(s) = msg {
+                received_found_urls.push(s);
             }
         }
         // So, we expect messages for /, /a/, /a/a/  etc. up to max_depth
         assert!(
-            received_messages.contains(&format!("[200 OK] {} [0W, 0C, 0L]", server.url("/a/")))
+            received_found_urls.iter().any(|s| s == &format!("[200 OK] {} [0W, 0C, 0L]", server.url("/a/")))
         );
         // If depth was 2, we expect up to /a/a/
         assert!(
-            received_messages.contains(&format!("[200 OK] {} [0W, 0C, 0L]", server.url("/a/a/")))
+            received_found_urls.iter().any(|s| s == &format!("[200 OK] {} [0W, 0C, 0L]", server.url("/a/a/")))
         );
 
         // We should not see /a/a/a/ or deeper if max_depth is 2
         assert!(
-            !received_messages
-                .contains(&format!("[200 OK] {} [0W, 0C, 0L]", server.url("/a/a/a/")))
+            !received_found_urls.iter().any(|s| s == &format!("[200 OK] {} [0W, 0C, 0L]", server.url("/a/a/a/")))
         );
 
         // Verify that only the expected number of unique URLs are in visited_urls
@@ -1083,10 +1082,10 @@ mod start_scan_tests {
         }
 
         assert!(
-            received_messages.contains(&format!("[200 OK] http://word1.example.com/ [0W, 0C, 0L]"))
+            received_messages.iter().any(|e| matches!(e, dircrab::ScanEvent::FoundUrl(s) if s == &format!("[200 OK] http://word1.example.com/ [0W, 0C, 0L]")))
         );
         assert!(
-            received_messages.contains(&format!("[200 OK] http://word2.example.com/ [0W, 0C, 0L]"))
+            received_messages.iter().any(|e| matches!(e, dircrab::ScanEvent::FoundUrl(s) if s == &format!("[200 OK] http://word2.example.com/ [0W, 0C, 0L]")))
         );
     }
 
@@ -1143,14 +1142,14 @@ mod start_scan_tests {
             received_messages.push(msg);
         }
 
-        assert!(received_messages.contains(&format!(
+        assert!(received_messages.iter().any(|e| matches!(e, dircrab::ScanEvent::FoundUrl(s) if s == &format!(
             "[200 OK] {}?param=word1 [0W, 0C, 0L]",
             server.url("/")
-        )));
-        assert!(received_messages.contains(&format!(
+        ))));
+        assert!(received_messages.iter().any(|e| matches!(e, dircrab::ScanEvent::FoundUrl(s) if s == &format!(
             "[200 OK] {}?param=word2 [0W, 0C, 0L]",
             server.url("/")
-        )));
+        ))));
     }
 }
 

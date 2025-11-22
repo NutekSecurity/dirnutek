@@ -416,7 +416,7 @@ mod tests {
     use tokio::sync::{Mutex, Semaphore}; // Import Mutex and Semaphore
     use url::Url; // Explicit import
 
-    use crate::{HttpMethod, perform_scan, start_scan}; // Import perform_scan and start_scan explicitly
+    use crate::{HttpMethod, perform_scan, start_scan, ScanEvent}; // Import perform_scan and start_scan explicitly, and ScanEvent
 
     #[tokio::test]
     async fn test_perform_scan_success() {
@@ -431,7 +431,7 @@ mod tests {
             .build()
             .unwrap();
         let base_url = Url::parse(&server.url("/").to_string()).unwrap();
-        let (tx, _rx) = mpsc::channel(1);
+        let (tx, _rx) = mpsc::channel(100);
 
         let result = perform_scan(
             &client,
@@ -469,7 +469,7 @@ mod tests {
             .build()
             .unwrap();
         let base_url = Url::parse(&server.url("/").to_string()).unwrap();
-        let (tx, _rx) = mpsc::channel(1);
+        let (tx, _rx) = mpsc::channel(100);
 
         let result = perform_scan(
             &client,
@@ -514,7 +514,7 @@ mod tests {
             .build()
             .unwrap();
         let base_url = Url::parse(&format!("http://{}", addr)).unwrap();
-        let (tx, _rx) = mpsc::channel(1);
+        let (tx, _rx) = mpsc::channel(100);
 
         let result = perform_scan(
             &client,
@@ -563,7 +563,7 @@ mod tests {
         let initial_base_url_clone = base_url.clone();
         visited_urls.lock().await.insert(initial_base_url_clone);
 
-        let max_depth = 0;
+        let max_depth = 1;
 
         start_scan(
             client,
@@ -590,15 +590,17 @@ mod tests {
         .await
         .unwrap();
 
-        let mut received_messages = Vec::new();
+        let mut received_found_urls = Vec::new();
         while let Some(msg) = rx.recv().await {
-            received_messages.push(msg);
+            if let ScanEvent::FoundUrl(s) = msg {
+                received_found_urls.push(s);
+            }
         }
 
-        assert_eq!(received_messages.len(), 1);
+        assert_eq!(received_found_urls.len(), 1);
         assert!(
-            received_messages.contains(&format!("[200 OK] {}a/ [0W, 0C, 0L]", server.url("/")))
-        );
+            received_found_urls.iter().any(|s| s == &format!("[200 OK] {}a/ [0W, 0C, 0L]", server.url("/"))))
+        ;
 
         let final_visited = visited_urls.lock().await;
         assert_eq!(final_visited.len(), 2);
@@ -641,9 +643,12 @@ mod tests {
         .await;
         assert!(result.is_ok());
 
-        // Ensure no message was sent for the 404 status
-        tokio::time::sleep(Duration::from_millis(10)).await; // Give some time for message to be sent if it were
-        assert!(rx.try_recv().is_err()); // Should be empty
+        // Ensure RequestCompleted is received, but no FoundUrl
+        let first_msg = rx.recv().await.expect("Expected a message to be sent");
+        assert!(matches!(first_msg, ScanEvent::RequestCompleted));
+
+        tokio::time::sleep(Duration::from_millis(10)).await; // Give some time for any delayed messages
+        assert!(rx.try_recv().is_err()); // Should be empty after consuming RequestCompleted
     }
     #[tokio::test]
     async fn test_perform_scan_post_data_fuzzing() {
@@ -665,7 +670,7 @@ mod tests {
             .unwrap();
         // Base URL for POST data fuzzing test
         let base_url = Url::parse(&server.url("/login").to_string()).unwrap();
-        let (tx, _rx) = mpsc::channel(1);
+        let (tx, _rx) = mpsc::channel(100);
 
         let data_to_fuzz = Some(r#"{"username":"admin","password":"FUZZ"}"#.to_string());
 
@@ -696,6 +701,7 @@ mod tests {
 #[cfg(test)]
 mod start_scan_tests {
     use crate::{HttpMethod, start_scan}; // Import start_scan explicitly
+    use crate::ScanEvent;
     use httptest::responders;
     use httptest::{Expectation, Server, matchers::*};
     use reqwest::Client;
@@ -768,13 +774,13 @@ mod start_scan_tests {
         }
 
         assert!(
-            received_messages.contains(&format!("[200 OK] {} [0W, 0C, 0L]", server.url("/admin/")))
+            received_messages.iter().any(|e| matches!(e, ScanEvent::FoundUrl(s) if s == &format!("[200 OK] {} [0W, 0C, 0L]", server.url("/admin/"))))
         );
         assert!(
-            received_messages.contains(&format!("[200 OK] {} [0W, 0C, 0L]", server.url("/test")))
+            received_messages.iter().any(|e| matches!(e, ScanEvent::FoundUrl(s) if s == &format!("[200 OK] {} [0W, 0C, 0L]", server.url("/test"))))
         );
         // Should not contain /admin/users as recursion depth is 1
-        assert!(!received_messages.contains(&format!("[200 OK] {}", server.url("/admin/users"))));
+        assert!(!received_messages.iter().any(|e| matches!(e, ScanEvent::FoundUrl(s) if s == &format!("[200 OK] {}", server.url("/admin/users")))));
     }
 
     #[tokio::test]
@@ -828,27 +834,25 @@ mod start_scan_tests {
         .await
         .unwrap();
 
-        let mut received_messages = Vec::new();
-        for _ in 0..max_depth {
-            // Expect messages for depth 0 and 1
-            if let Some(msg) = rx.recv().await {
-                received_messages.push(msg);
-            } else {
-                break;
+        let mut received_found_urls = Vec::new();
+        // Consume all events until ScanFinished
+        while let Some(msg) = rx.recv().await {
+            if let ScanEvent::FoundUrl(s) = msg {
+                received_found_urls.push(s);
             }
         }
+
         assert!(
-            received_messages.contains(&format!("[200 OK] {} [0W, 0C, 0L]", server.url("/a/")))
+            received_found_urls.iter().any(|s| s == &format!("[200 OK] {} [0W, 0C, 0L]", server.url("/a/")))
         );
         // If depth was 2, we expect up to /a/a/
         assert!(
-            received_messages.contains(&format!("[200 OK] {} [0W, 0C, 0L]", server.url("/a/a/")))
+            received_found_urls.iter().any(|s| s == &format!("[200 OK] {} [0W, 0C, 0L]", server.url("/a/a/")))
         );
 
         // We should not see /a/a/a/ or deeper if max_depth is 2
         assert!(
-            !received_messages
-                .contains(&format!("[200 OK] {} [0W, 0C, 0L]", server.url("/a/a/a/")))
+            !received_found_urls.iter().any(|s| s == &format!("[200 OK] {} [0W, 0C, 0L]", server.url("/a/a/a/")))
         );
 
         // Verify that only the expected number of unique URLs are in visited_urls
