@@ -6,6 +6,20 @@ use std::sync::Arc;
 use tokio::sync::{Mutex, Semaphore, mpsc::Sender};
 use tokio::task::JoinSet;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ScanEvent {
+    /// A new URL has been found.
+    FoundUrl(String),
+    /// A request has been completed.
+    RequestCompleted,
+    /// An error occurred during a request.
+    ErrorOccurred,
+    /// The scan has started, providing the total number of words in the wordlist.
+    ScanStarted { total_words: usize },
+    /// The scan has finished.
+    ScanFinished,
+}
+
 #[derive(Debug, Clone, ValueEnum, PartialEq)]
 pub enum FuzzMode {
     /// Fuzzes the path segment of the URL (default).
@@ -31,7 +45,7 @@ pub async fn perform_scan(
     client: &Client,
     base_url: &url::Url,
     word: &str,
-    tx: Sender<String>,
+    tx: Sender<ScanEvent>, // Changed to ScanEvent
     http_method: &HttpMethod,
     exclude_status: &Option<HashSet<u16>>,
     include_status: &Option<HashSet<u16>>,
@@ -125,7 +139,19 @@ pub async fn perform_scan(
         }
     }
 
-    let res = request_builder.send().await?;
+    let res = request_builder.send().await;
+    let res = match res {
+        Ok(r) => {
+            tx.send(ScanEvent::RequestCompleted).await?;
+            r
+        }
+        Err(e) => {
+            tx.send(ScanEvent::ErrorOccurred).await?;
+            return Err(e.into());
+        }
+    };
+
+
     let status = res.status();
     let status_code = status.as_u16();
     let url_str = target_url.to_string();
@@ -150,12 +176,11 @@ pub async fn perform_scan(
             return Ok(None);
         }
     } else if status_code == 404 {
-        // Exclude 404 by default if no explicit filtering
         return Ok(None);
     }
 
     let body = res.text().await?;
-    let (words, chars, lines) = if status_code == 301 {
+    let (words_count, chars_count, lines_count) = if status_code == 301 {
         (0, 0, 0)
     } else {
         let w = body.split_whitespace().count();
@@ -165,51 +190,49 @@ pub async fn perform_scan(
     };
 
     if let Some(exact_w_list) = exact_words {
-        if !exact_w_list.contains(&words) {
+        if !exact_w_list.contains(&words_count) {
             return Ok(None);
         }
     }
     if let Some(exact_c_list) = exact_chars {
-        if !exact_c_list.contains(&chars) {
+        if !exact_c_list.contains(&chars_count) {
             return Ok(None);
         }
     }
     if let Some(exact_l_list) = exact_lines {
-        if !exact_l_list.contains(&lines) {
+        if !exact_l_list.contains(&lines_count) {
             return Ok(None);
         }
     }
 
     if let Some(exclude_exact_w_list) = exclude_exact_words {
-        if exclude_exact_w_list.contains(&words) {
+        if exclude_exact_w_list.contains(&words_count) {
             return Ok(None);
         }
     }
     if let Some(exclude_exact_c_list) = exclude_exact_chars {
-        if exclude_exact_c_list.contains(&chars) {
+        if exclude_exact_c_list.contains(&chars_count) {
             return Ok(None);
         }
     }
     if let Some(exclude_exact_l_list) = exclude_exact_lines {
-        if exclude_exact_l_list.contains(&lines) {
+        if exclude_exact_l_list.contains(&lines_count) {
             return Ok(None);
         }
     }
 
-    let output = match status_code {
-        301 => Some(format!(
+    let formatted_output = match status_code {
+        301 => format!(
             "[{}] {} -> {} [{}W, {}C, {}L]",
-            status, url_str, redirect_target, words, chars, lines
-        )),
-        _ => Some(format!(
+            status, url_str, redirect_target, words_count, chars_count, lines_count
+        ),
+        _ => format!(
             "[{}] {} [{}W, {}C, {}L]",
-            status, url_str, words, chars, lines
-        )),
+            status, url_str, words_count, chars_count, lines_count
+        ),
     };
 
-    if let Some(msg) = output {
-        tx.send(msg).await?;
-    }
+    tx.send(ScanEvent::FoundUrl(formatted_output)).await?; // Changed to ScanEvent
 
     // If the status is success, we've found something.
     // We'll return it as a potential base for the next level of scanning.
@@ -234,7 +257,7 @@ pub async fn start_scan(
     client: Client,
     base_url: url::Url,
     words: Vec<String>,
-    tx: Sender<String>,
+    tx: Sender<ScanEvent>, // Changed to ScanEvent
     semaphore: Arc<Semaphore>,
     visited_urls: Arc<Mutex<HashSet<url::Url>>>,
     http_method: HttpMethod,
@@ -256,6 +279,9 @@ pub async fn start_scan(
     let scan_queue: Arc<Mutex<VecDeque<(url::Url, usize)>>> = Arc::new(Mutex::new(VecDeque::new()));
     let mut join_set: JoinSet<Result<()>> = JoinSet::new();
 
+    // Send ScanStarted event
+    tx.send(ScanEvent::ScanStarted { total_words: words.len() }).await?;
+
     // Initial push to the queue
     scan_queue.lock().await.push_back((base_url.clone(), 0));
 
@@ -273,8 +299,8 @@ pub async fn start_scan(
                 // This allows new URLs to be added to the queue by other tasks
                 drop(queue); // Release the lock before awaiting
                 tokio::select! {
-                    _ = join_set.join_next() => {},
                     _ = tokio::time::sleep(tokio::time::Duration::from_millis(100)) => {},
+                    _ = join_set.join_next() => {},
                 }
                 continue;
             }
@@ -316,11 +342,15 @@ pub async fn start_scan(
                     tokio::time::sleep(tokio::time::Duration::from_millis(d)).await;
                 }
 
+                // Send progress update
+                tx_clone.send(ScanEvent::RequestCompleted).await?;
+
+
                 let result = perform_scan(
                     &client_clone,
                     &current_url_clone,
                     &word_clone,
-                    tx_clone,
+                    tx_clone, // Pass the new Sender
                     &http_method_clone,
                     &exclude_status_clone,
                     &include_status_clone,
@@ -348,6 +378,7 @@ pub async fn start_scan(
                         }
                     }
                 } else if let Err(e) = result {
+                    // tx_clone.send(ScanEvent::ErrorOccurred).await?; // Error already sent by perform_scan
                     eprintln!(
                         "Error from perform_scan for {} + {}: {:?}",
                         current_url_clone, word_clone, e
@@ -362,6 +393,9 @@ pub async fn start_scan(
     while let Some(res) = join_set.join_next().await {
         res??;
     }
+
+    // Send ScanFinished event
+    tx.send(ScanEvent::ScanFinished).await?;
 
     drop(tx);
 

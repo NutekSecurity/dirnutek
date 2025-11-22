@@ -10,14 +10,16 @@ use tokio::fs::File;
 use tokio::io::{self, AsyncBufReadExt, BufReader};
 use tokio::sync::{Mutex, Semaphore, mpsc};
 
+mod tui;
+
+use dircrab::{FuzzMode, HttpMethod, start_scan, ScanEvent};
+
 fn parse_status_codes(s: &str) -> Result<HashSet<u16>, String> {
     s.split(',')
         .map(|s| s.trim().parse::<u16>())
         .collect::<Result<HashSet<u16>, _>>()
         .map_err(|e| format!("Invalid status code: {}", e))
 }
-
-use dircrab::{FuzzMode, HttpMethod, start_scan};
 
 fn wordlist_path_parser(s: &str) -> Result<PathBuf, String> {
     let path = PathBuf::from(s);
@@ -135,6 +137,14 @@ struct Cli {
     /// Example: -d '{"username":"admin","password":"FUZZ"}'
     #[arg(short, long, value_name = "DATA")]
     data: Option<String>,
+
+    /// Enable Terminal User Interface (TUI) mode
+    #[arg(long, default_value = "false")]
+    tui: bool,
+
+    /// Enable verbose output, including request completion and error messages.
+    #[arg(long, default_value = "false")]
+    verbose: bool,
 }
 
 async fn read_wordlist(path: PathBuf) -> Result<Vec<String>, io::Error> {
@@ -278,7 +288,7 @@ async fn main() -> Result<()> {
 
     let client = client_builder.build()?;
 
-    let (tx, mut rx) = mpsc::channel::<String>(100);
+    let (tx, mut rx) = mpsc::channel::<ScanEvent>(100);
     let semaphore = Arc::new(Semaphore::new(cli.concurrency));
     let visited_urls: Arc<Mutex<HashSet<url::Url>>> = Arc::new(Mutex::new(HashSet::new()));
 
@@ -290,18 +300,54 @@ async fn main() -> Result<()> {
         }
     }
 
-    // Spawn a task to receive and print messages
-    let printer_handle = tokio::spawn(async move {
-        while let Some(msg) = rx.recv().await {
-            println!("{}", msg);
-        }
-    });
+    let rx_consumer_handle = if cli.tui {
+        // Initialize TUI
+        let mut terminal = tui::init()?;
+        // Spawn TUI as a separate task, moving rx into it
+        tokio::spawn(async move {
+            let result = tui::run_tui(&mut terminal, rx).await;
+            tui::restore().expect("Failed to restore terminal");
+            // Convert io::Result to anyhow::Result
+            result.map_err(anyhow::Error::from)
+        })
+    } else {
+        // Spawn a task to receive and print messages, moving rx into it
+        tokio::spawn(async move {
+            while let Some(event) = rx.recv().await {
+                match event {
+                    ScanEvent::ScanStarted { total_words } => {
+                        println!("# Scan started with {} words.", total_words);
+                    }
+                    ScanEvent::ScanFinished => {
+                        println!("# Scan finished.");
+                    }
+                    ScanEvent::RequestCompleted => {
+                        if cli.verbose {
+                            eprintln!("Request completed.");
+                        }
+                    }
+                    ScanEvent::ErrorOccurred => {
+                        if cli.verbose {
+                            eprintln!("Error occurred during scan.");
+                        }
+                    }
+                    ScanEvent::FoundUrl(url_str) => {
+                        println!("{}", url_str);
+                    }
+                }
+            }
+            Ok(())
+        })
+    };
 
     for (base_url, fuzz_mode) in processed_urls_with_modes {
-        println!(
-            "# Starting scan for URL: {} (FuzzMode: {:?})",
-            base_url, fuzz_mode
-        );
+        // Only print this if TUI is not enabled
+        if !cli.tui {
+            println!(
+                "# Starting scan for URL: {} (FuzzMode: {:?})",
+                base_url, fuzz_mode
+            );
+        }
         start_scan(
             client.clone(), // Clone client for each scan
             base_url,
@@ -327,11 +373,10 @@ async fn main() -> Result<()> {
         .await?;
     }
 
-    // Drop the original tx to signal the printer_handle to finish
+    // Drop the original tx to signal the receiver to finish
     drop(tx);
 
-    // Wait for the printer task to finish
-    printer_handle.await?;
+    rx_consumer_handle.await??;
 
     Ok(())
 }
