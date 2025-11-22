@@ -8,16 +8,17 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::fs::File;
 use tokio::io::{self, AsyncBufReadExt, BufReader};
-use tokio::sync::{Mutex, Semaphore, mpsc};
+use tokio::sync::{mpsc, broadcast, Mutex};
+use tokio::signal;
 
 mod tui;
 
-use dircrab::{FuzzMode, HttpMethod, start_scan, ScanEvent};
+use dircrab::{FuzzMode, HttpMethod, ScanEvent, ControlEvent};
 
 fn parse_status_codes(s: &str) -> Result<HashSet<u16>, String> {
     s.split(',')
-        .map(|s| s.trim().parse::<u16>())
-        .collect::<Result<HashSet<u16>, _>>()
+        .map(|s| s.trim().parse::<u16>()) 
+        .collect::<Result<HashSet<u16>, _>>() 
         .map_err(|e| format!("Invalid status code: {}", e))
 }
 
@@ -288,24 +289,27 @@ async fn main() -> Result<()> {
 
     let client = client_builder.build()?;
 
-    let (tx, mut rx) = mpsc::channel::<ScanEvent>(100);
-    let semaphore = Arc::new(Semaphore::new(cli.concurrency));
-    let visited_urls: Arc<Mutex<HashSet<url::Url>>> = Arc::new(Mutex::new(HashSet::new()));
+    let (tx_scan_events, mut rx_scan_events) = mpsc::channel::<ScanEvent>(100);
+    let (tx_control, _rx_control_for_main) = broadcast::channel::<ControlEvent>(1); // Capacity 1 is enough for stop signal
 
-    // Add initial target URLs to the globally visited set
-    {
-        let mut visited = visited_urls.lock().await;
-        for (url, _) in &processed_urls_with_modes {
-            visited.insert(url.clone());
+    // Handle Ctrl-C for graceful shutdown
+    let ctrl_c_handler_tx = tx_control.clone();
+    tokio::spawn(async move {
+        signal::ctrl_c().await.expect("Failed to listen for Ctrl-C");
+        eprintln!("\nCtrl-C received, attempting graceful shutdown...");
+        if let Err(e) = ctrl_c_handler_tx.send(ControlEvent::Stop) {
+            eprintln!("Error sending stop signal: {}", e);
         }
-    }
+    });
+
 
     let rx_consumer_handle = if cli.tui {
         // Initialize TUI
         let mut terminal = tui::init()?;
         // Spawn TUI as a separate task, moving rx into it
+        let tx_control_clone = tx_control.clone();
         tokio::spawn(async move {
-            let result = tui::run_tui(&mut terminal, rx).await;
+            let result = tui::run_tui(&mut terminal, rx_scan_events, tx_control_clone).await;
             tui::restore().expect("Failed to restore terminal");
             // Convert io::Result to anyhow::Result
             result.map_err(anyhow::Error::from)
@@ -313,7 +317,7 @@ async fn main() -> Result<()> {
     } else {
         // Spawn a task to receive and print messages, moving rx into it
         tokio::spawn(async move {
-            while let Some(event) = rx.recv().await {
+            while let Some(event) = rx_scan_events.recv().await {
                 match event {
                     ScanEvent::ScanStarted { total_words } => {
                         println!("# Scan started with {} words.", total_words);
@@ -321,14 +325,22 @@ async fn main() -> Result<()> {
                     ScanEvent::ScanFinished => {
                         println!("# Scan finished.");
                     }
+                    ScanEvent::ScanStopped => {
+                        println!("# Scan stopped by user.");
+                    }
                     ScanEvent::RequestCompleted => {
                         if cli.verbose {
                             eprintln!("Request completed.");
                         }
                     }
-                    ScanEvent::ErrorOccurred => {
+                    ScanEvent::ErrorOccurred(msg) => {
                         if cli.verbose {
-                            eprintln!("Error occurred during scan.");
+                            eprintln!("Error occurred during scan: {}", msg);
+                        }
+                    }
+                    ScanEvent::Warning(msg) => {
+                        if cli.verbose {
+                            eprintln!("Warning: {}", msg);
                         }
                     }
                     ScanEvent::FoundUrl(url_str) => {
@@ -340,43 +352,87 @@ async fn main() -> Result<()> {
         })
     };
 
-    for (base_url, fuzz_mode) in processed_urls_with_modes {
-        // Only print this if TUI is not enabled
-        if !cli.tui {
-            println!(
-                "# Starting scan for URL: {} (FuzzMode: {:?})",
-                base_url, fuzz_mode
-            );
+    let client_clone = client.clone();
+    let words_clone = words.clone();
+    let tx_scan_events_clone = tx_scan_events.clone();
+
+    let cli_method_clone = cli.method.clone();
+    let cli_exclude_status_clone = cli.exclude_status.clone();
+    let cli_include_status_clone = cli.include_status.clone();
+    let cli_depth = cli.depth;
+    let cli_delay = cli.delay;
+    let cli_exact_words_clone = cli.exact_words.clone();
+    let cli_exact_chars_clone = cli.exact_chars.clone();
+    let cli_exact_lines_clone = cli.exact_lines.clone();
+    let cli_exclude_exact_words_clone = cli.exclude_exact_words.clone();
+    let cli_exclude_exact_chars_clone = cli.exclude_exact_chars.clone();
+    let cli_exclude_exact_lines_clone = cli.exclude_exact_lines.clone();
+    let cli_headers_clone = cli.headers.clone();
+    let cli_data_clone = cli.data.clone();
+    let cli_concurrency = cli.concurrency;
+    let cli_tui = cli.tui;
+    let tx_control_orchestrator = tx_control.clone();
+
+    let scan_orchestrator_handle = tokio::spawn(async move {
+        let mut ctrl_rx_for_orchestrator = tx_control_orchestrator.subscribe(); // Orchestrator listens for control events
+
+        for (base_url, fuzz_mode) in processed_urls_with_modes {
+            // Get a resubscribed receiver for the current start_scan instance
+            let current_scan_ctrl_rx = ctrl_rx_for_orchestrator.resubscribe(); 
+
+            tokio::select! {
+                _ = ctrl_rx_for_orchestrator.recv() => {
+                    // Control signal received (e.g., Stop), break the loop
+                    break;
+                }
+                _ = async {
+                    // Only print this if TUI is not enabled
+                    if !cli_tui {
+                        println!(
+                            "# Starting scan for URL: {} (FuzzMode: {:?})",
+                            base_url, fuzz_mode
+                        );
+                    }
+                    let visited_urls_arc = Arc::new(Mutex::new(HashSet::new()));
+                    dircrab::start_scan(
+                        client_clone.clone(), // Clone client for each scan
+                        base_url,
+                        words_clone.clone(),        // Clone words for each scan
+                        tx_scan_events_clone.clone(),           // Clone sender for each scan
+                        visited_urls_arc, // Pass the new visited_urls_arc
+                        current_scan_ctrl_rx, // Pass the resubscribed receiver
+                        cli_concurrency,
+                        cli_method_clone.clone(),
+                        cli_exclude_status_clone.clone(),
+                        cli_include_status_clone.clone(),
+                        cli_depth,
+                        cli_delay,
+                        cli_exact_words_clone.clone(),
+                        cli_exact_chars_clone.clone(),
+                        cli_exact_lines_clone.clone(),
+                        cli_exclude_exact_words_clone.clone(),
+                        cli_exclude_exact_chars_clone.clone(),
+                        cli_exclude_exact_lines_clone.clone(),
+                        fuzz_mode,
+                        cli_headers_clone.clone(),
+                        cli_data_clone.clone(), // Pass the data argument
+                    )
+                    .await?;
+                    Ok::<(), anyhow::Error>(())
+                } => {} // This arm does nothing, it's just to allow the select to proceed
+            }
         }
-        start_scan(
-            client.clone(), // Clone client for each scan
-            base_url,
-            words.clone(),        // Clone words for each scan
-            tx.clone(),           // Clone sender for each scan
-            semaphore.clone(),    // Clone semaphore for each scan
-            visited_urls.clone(), // Pass the shared visited_urls
-            cli.method.clone(),
-            cli.exclude_status.clone(),
-            cli.include_status.clone(),
-            cli.depth,
-            cli.delay,
-            cli.exact_words.clone(),
-            cli.exact_chars.clone(),
-            cli.exact_lines.clone(),
-            cli.exclude_exact_words.clone(),
-            cli.exclude_exact_chars.clone(),
-            cli.exclude_exact_lines.clone(),
-            fuzz_mode,
-            cli.headers.clone(),
-            cli.data.clone(), // Pass the data argument
-        )
-        .await?;
-    }
+        Ok::<(), anyhow::Error>(())
+    });
 
-    // Drop the original tx to signal the receiver to finish
-    drop(tx);
+    // Drop the original tx for ScanEvents so rx_consumer_handle can complete
+    drop(tx_scan_events);
+    // Drop the original tx for ControlEvents to ensure all receivers will eventually see the channel closed
+    drop(tx_control);
 
+    // Wait for both the TUI/console consumer and the scan orchestrator to finish
     rx_consumer_handle.await??;
+    scan_orchestrator_handle.await??;
 
     Ok(())
 }
