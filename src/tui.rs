@@ -25,7 +25,8 @@ pub type Tui = Terminal<CrosstermBackend<io::Stdout>>;
 /// The application state for the TUI.
 #[derive(Debug)]
 pub struct App {
-    pub found_urls: VecDeque<String>,
+    pub found_urls: Vec<String>,
+    pub list_state: ListState, // Add ListState for scrolling
     pub requests_completed: usize,
     pub errors_occurred: usize,
     pub total_words: usize,
@@ -38,7 +39,8 @@ pub struct App {
 impl Default for App {
     fn default() -> Self {
         Self {
-            found_urls: VecDeque::with_capacity(100), // Keep last 100 found URLs
+            found_urls: Vec::new(), // Store all found URLs
+            list_state: ListState::default(),
             requests_completed: 0,
             errors_occurred: 0,
             total_words: 0,
@@ -51,12 +53,11 @@ impl Default for App {
 }
 
 impl App {
-    /// Adds a found URL to the list, maintaining a maximum capacity.
+    /// Adds a found URL to the list and updates the selection to it.
     pub fn add_found_url(&mut self, url: String) {
-        if self.found_urls.len() == self.found_urls.capacity() {
-            self.found_urls.pop_front();
-        }
-        self.found_urls.push_back(url);
+        self.found_urls.push(url);
+        let new_index = self.found_urls.len().saturating_sub(1);
+        self.list_state.select(Some(new_index));
     }
 
     /// Calculates requests per second.
@@ -201,12 +202,13 @@ pub async fn run_tui(terminal: &mut Tui, mut rx_events: mpsc::Receiver<ScanEvent
                 .repeat_highlight_symbol(true)
                 .direction(ratatui::widgets::ListDirection::TopToBottom);
 
-            let mut list_state = ListState::default(); // Not using selection, but needed for List widget
+            let mut list_state = app.list_state.clone(); // Clone to render, state will be updated in event loop
             frame.render_stateful_widget(found_urls_list, layout[1], &mut list_state);
         })?;
 
+        let timeout = tick_rate.checked_sub(last_tick.elapsed()).unwrap_or_else(|| Duration::from_secs(0));
         tokio::select! {
-            _ = tokio::time::sleep(tick_rate.checked_sub(last_tick.elapsed()).unwrap_or_else(|| Duration::from_secs(0))) => {
+            _ = tokio::time::sleep(timeout) => {
                 last_tick = Instant::now();
             }
             Some(event) = rx_events.recv() => {
@@ -232,12 +234,86 @@ pub async fn run_tui(terminal: &mut Tui, mut rx_events: mpsc::Receiver<ScanEvent
             }
             Some(key_event) = rx_key_events.recv() => {
                 if let Event::Key(key) = key_event {
-                    if key.kind == KeyEventKind::Press && key.code == KeyCode::Char('q') {
-                        break; // Exit the TUI loop
+                    if key.kind == KeyEventKind::Press {
+                        match key.code {
+                            KeyCode::Char('q') | KeyCode::Esc => {
+                                break; // Exit the TUI loop
+                            }
+                            KeyCode::Up => app.scroll_up(),
+                            KeyCode::Down => app.scroll_down(),
+                            KeyCode::PageUp => app.scroll_page_up(),
+                            KeyCode::PageDown => app.scroll_page_down(),
+                            KeyCode::Home => app.scroll_to_top(),
+                            KeyCode::End => app.scroll_to_bottom(),
+                            _ => {}
+                        }
                     }
                 }
             }
         }
     }
     Ok(())
+}
+
+impl App {
+    /// Scrolls up in the found_urls list.
+    fn scroll_up(&mut self) {
+        if let Some(selected) = self.list_state.selected() {
+            if selected > 0 {
+                self.list_state.select(Some(selected - 1));
+            } else {
+                self.list_state.select(Some(self.found_urls.len().saturating_sub(1))); // Wrap around to bottom
+            }
+        } else if !self.found_urls.is_empty() {
+            self.list_state.select(Some(self.found_urls.len().saturating_sub(1)));
+        }
+    }
+
+    /// Scrolls down in the found_urls list.
+    fn scroll_down(&mut self) {
+        if let Some(selected) = self.list_state.selected() {
+            if selected < self.found_urls.len().saturating_sub(1) {
+                self.list_state.select(Some(selected + 1));
+            } else {
+                self.list_state.select(Some(0)); // Wrap around to top
+            }
+        } else if !self.found_urls.is_empty() {
+            self.list_state.select(Some(0));
+        }
+    }
+
+    /// Scrolls a page up in the found_urls list.
+    fn scroll_page_up(&mut self) {
+        if let Some(selected) = self.list_state.selected() {
+            let page_size = (self.found_urls.len() as f64 * 0.1) as usize; // Example: 10% of total items
+            self.list_state.select(Some(selected.saturating_sub(page_size.max(1)))); // Scroll at least 1 item
+        } else if !self.found_urls.is_empty() {
+            self.list_state.select(Some(self.found_urls.len().saturating_sub(1)));
+        }
+    }
+
+    /// Scrolls a page down in the found_urls list.
+    fn scroll_page_down(&mut self) {
+        if let Some(selected) = self.list_state.selected() {
+            let page_size = (self.found_urls.len() as f64 * 0.1) as usize; // Example: 10% of total items
+            let new_index = selected.saturating_add(page_size.max(1));
+            self.list_state.select(Some(new_index.min(self.found_urls.len().saturating_sub(1))));
+        } else if !self.found_urls.is_empty() {
+            self.list_state.select(Some(0));
+        }
+    }
+
+    /// Scrolls to the top of the found_urls list.
+    fn scroll_to_top(&mut self) {
+        if !self.found_urls.is_empty() {
+            self.list_state.select(Some(0));
+        }
+    }
+
+    /// Scrolls to the bottom of the found_urls list.
+    fn scroll_to_bottom(&mut self) {
+        if !self.found_urls.is_empty() {
+            self.list_state.select(Some(self.found_urls.len().saturating_sub(1)));
+        }
+    }
 }
