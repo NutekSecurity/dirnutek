@@ -343,19 +343,8 @@ async fn main() -> Result<()> {
                             eprintln!("Warning: {}", msg);
                         }
                     }
-                    ScanEvent::FoundUrl(full_output) => {
-                        let re = Regex::new(r"^\[.*?\]\s+(.*?)(?:\s+->.*)?\s+\[.*\]$").unwrap();
-                        if let Some(captures) = re.captures(&full_output) {
-                            if let Some(url) = captures.get(1) {
-                                println!("{}", url.as_str());
-                            } else {
-                                eprintln!("Warning: Could not parse URL from '{}'", full_output);
-                                println!("{}", full_output); // Fallback to printing full output
-                            }
-                        } else {
-                            eprintln!("Warning: Could not parse URL from '{}'", full_output);
-                            println!("{}", full_output); // Fallback to printing full output
-                        }
+                    ScanEvent::FoundUrl(url_str) => {
+                        println!("{}", url_str);
                     }
                 }
             }

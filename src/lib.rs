@@ -242,7 +242,7 @@ pub async fn perform_scan(
         ),
     };
 
-    tx.send(ScanEvent::FoundUrl(formatted_output)).await?; // Changed to ScanEvent
+    tx.send(ScanEvent::FoundUrl(formatted_output.trim().to_string())).await?; // Changed to ScanEvent
 
     // If the status is success, we've found something.
     // We'll return it as a potential base for the next level of scanning.
