@@ -8,7 +8,8 @@ use std::sync::{
     Arc,
     atomic::{AtomicUsize, Ordering},
 };
-use std::time::Duration;
+use tokio::time::Duration; // Added for global scope
+
 
 // Helper function to create a temporary wordlist file for tests
 fn create_temp_wordlist(content: &str) -> tempfile::NamedTempFile {
@@ -829,18 +830,25 @@ fn test_cli_results_file_with_comments() {
     assert!(!stdout_str.contains("# This is a comment in results"));
 }
 
-#[cfg(test)]
 mod start_scan_tests {
     use bstr::{B, ByteSlice};
-    use dircrab::{FuzzMode, HttpMethod, start_scan};
-    use httptest::{Expectation, Server, matchers::*, responders};
+    use dircrab::{HttpMethod, FuzzMode, start_scan, ControlEvent}; // Added ControlEvent
+    use httptest::matchers::*;
+    use httptest::responders;
+    use httptest::{Expectation, Server};
     use reqwest::Client;
-    use std::collections::HashSet;
+    use std::collections::{HashSet, HashMap};
+    use std::fs;
+    use std::path::PathBuf;
     use std::sync::Arc;
-    use std::time::Duration;
-    use tokio::sync::mpsc;
-    use tokio::sync::{Mutex, Semaphore};
+    use tokio::sync::{mpsc, Mutex, Semaphore, broadcast}; // Added broadcast
     use url::Url;
+    use once_cell::sync::Lazy; // Added Lazy
+    use tokio::time::Duration; // Added this line
+
+// Global ControlEvent sender/receiver for testing
+static TEST_CONTROL_CHANNEL: Lazy<(tokio::sync::broadcast::Sender<ControlEvent>, tokio::sync::broadcast::Receiver<ControlEvent>)> =
+    Lazy::new(|| tokio::sync::broadcast::channel(1));
 
     #[tokio::test]
     async fn test_start_scan_no_recursion() {
@@ -865,7 +873,7 @@ mod start_scan_tests {
             .unwrap();
         let base_url = Url::parse(&server.url("/").to_string()).unwrap();
         let (tx, mut rx) = mpsc::channel(100);
-        let semaphore = Arc::new(Semaphore::new(1));
+        let _semaphore = Arc::new(Semaphore::new(1));
         let words = vec![
             "admin/".to_string(),
             "test".to_string(),
@@ -875,13 +883,15 @@ mod start_scan_tests {
 
         let max_depth = 1; // max_depth = 1 (no recursion)
 
+            // This part will be declared globally once.
         start_scan(
             client,
             base_url,
             words,
             tx,
-            semaphore,
             visited_urls.clone(),
+            TEST_CONTROL_CHANNEL.1.resubscribe(), // Dummy receiver for control events
+            1, // Concurrency for testing
             HttpMethod::GET,
             None, // exclude_status
             None, // include_status
@@ -938,7 +948,7 @@ mod start_scan_tests {
             .unwrap();
         let base_url = Url::parse(&server.url("/").to_string()).unwrap();
         let (tx, mut rx) = mpsc::channel(100);
-        let semaphore = Arc::new(Semaphore::new(1));
+        let _semaphore = Arc::new(Semaphore::new(1));
         let words = vec!["a/".to_string()]; // The word that will be appended
 
         let visited_urls: Arc<Mutex<HashSet<url::Url>>> = Arc::new(Mutex::new(HashSet::new()));
@@ -947,13 +957,15 @@ mod start_scan_tests {
 
         let max_depth = 2; // Set max depth to 2 to limit recursion
 
+            // This part will be declared globally once.
         start_scan(
             client,
             base_url.clone(), // Clone base_url here
             words,
             tx,
-            semaphore,
             visited_urls.clone(),
+            TEST_CONTROL_CHANNEL.1.resubscribe(), // Dummy receiver for control events
+            1, // Concurrency for testing
             HttpMethod::GET,
             None,      // exclude_status
             None,      // include_status
@@ -1047,17 +1059,19 @@ mod start_scan_tests {
             .unwrap();
         let base_url = Url::parse("http://FUZZ.example.com").unwrap();
         let (tx, mut rx) = mpsc::channel(100);
-        let semaphore = Arc::new(Semaphore::new(1));
+        let _semaphore = Arc::new(Semaphore::new(1));
         let words = vec!["word1".to_string(), "word2".to_string()];
         let visited_urls: Arc<Mutex<HashSet<url::Url>>> = Arc::new(Mutex::new(HashSet::new()));
 
+            // This part will be declared globally once.
         start_scan(
             client,
             base_url,
             words,
             tx,
-            semaphore,
             visited_urls.clone(),
+            TEST_CONTROL_CHANNEL.1.resubscribe(), // Dummy receiver for control events
+            1, // Concurrency for testing
             HttpMethod::GET,
             None, // exclude_status
             None, // include_status
@@ -1108,17 +1122,19 @@ mod start_scan_tests {
             .unwrap();
         let base_url = Url::parse(&server.url("/?param=FUZZ").to_string()).unwrap();
         let (tx, mut rx) = mpsc::channel(100);
-        let semaphore = Arc::new(Semaphore::new(1));
+        let _semaphore = Arc::new(Semaphore::new(1));
         let words = vec!["word1".to_string(), "word2".to_string()];
         let visited_urls: Arc<Mutex<HashSet<url::Url>>> = Arc::new(Mutex::new(HashSet::new()));
 
+            // This part will be declared globally once.
         start_scan(
             client,
             base_url,
             words,
             tx,
-            semaphore,
             visited_urls.clone(),
+            TEST_CONTROL_CHANNEL.1.resubscribe(), // Dummy receiver for control events
+            1, // Concurrency for testing
             HttpMethod::GET,
             None, // exclude_status
             None, // include_status

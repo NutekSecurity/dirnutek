@@ -304,6 +304,7 @@ dependencies = [
  "clap",
  "crossterm",
  "httptest",
+ "once_cell",
  "predicates",
  "ratatui",
  "regex",

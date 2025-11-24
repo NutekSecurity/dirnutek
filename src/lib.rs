@@ -3,7 +3,7 @@ use clap::ValueEnum;
 use reqwest::Client;
 use std::collections::{HashSet, VecDeque};
 use std::sync::Arc;
-use tokio::sync::{Mutex, Semaphore, mpsc::Sender};
+use tokio::sync::{Mutex, Semaphore, mpsc::Sender, broadcast}; // Add broadcast
 use tokio::task::JoinSet;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -13,11 +13,21 @@ pub enum ScanEvent {
     /// A request has been completed.
     RequestCompleted,
     /// An error occurred during a request.
-    ErrorOccurred,
+    ErrorOccurred(String),
     /// The scan has started, providing the total number of words in the wordlist.
     ScanStarted { total_words: usize },
     /// The scan has finished.
     ScanFinished,
+    /// The scan has been stopped by user.
+    ScanStopped,
+    /// A warning message.
+    Warning(String),
+}
+
+#[derive(Debug, Clone)]
+pub enum ControlEvent {
+    /// Stop the ongoing scan.
+    Stop,
 }
 
 #[derive(Debug, Clone, ValueEnum, PartialEq)]
@@ -146,7 +156,7 @@ pub async fn perform_scan(
             r
         }
         Err(e) => {
-            tx.send(ScanEvent::ErrorOccurred).await?;
+            tx.send(ScanEvent::ErrorOccurred(e.to_string())).await?;
             return Err(e.into());
         }
     };
@@ -257,9 +267,10 @@ pub async fn start_scan(
     client: Client,
     base_url: url::Url,
     words: Vec<String>,
-    tx: Sender<ScanEvent>, // Changed to ScanEvent
-    semaphore: Arc<Semaphore>,
+    tx: Sender<ScanEvent>,
     visited_urls: Arc<Mutex<HashSet<url::Url>>>,
+    _ctrl_rx: broadcast::Receiver<ControlEvent>,
+    concurrency: usize,
     http_method: HttpMethod,
     exclude_status: Option<HashSet<u16>>,
     include_status: Option<HashSet<u16>>,
@@ -275,6 +286,7 @@ pub async fn start_scan(
     headers: Vec<String>,
     data: Option<String>,
 ) -> Result<()> {
+    let semaphore = Arc::new(Semaphore::new(concurrency));
     let scan_delay_for_loop = delay.clone();
     let scan_queue: Arc<Mutex<VecDeque<(url::Url, usize)>>> = Arc::new(Mutex::new(VecDeque::new()));
     let mut join_set: JoinSet<Result<()>> = JoinSet::new();
@@ -556,7 +568,7 @@ mod tests {
             .unwrap();
         let base_url = Url::parse(&server.url("/").to_string()).unwrap();
         let (tx, mut rx) = mpsc::channel(100);
-        let semaphore = Arc::new(Semaphore::new(1));
+        let _semaphore = Arc::new(Semaphore::new(1));
         let words = vec!["a/".to_string()];
 
         let visited_urls: Arc<Mutex<HashSet<url::Url>>> = Arc::new(Mutex::new(HashSet::new()));
@@ -565,13 +577,17 @@ mod tests {
 
         let max_depth = 1;
 
+        // Create a dummy ControlEvent sender/receiver for testing
+        let (_test_tx_control, test_rx_control) = tokio::sync::broadcast::channel(1);
+
         start_scan(
             client,
             base_url.clone(),
             words,
             tx,
-            semaphore,
             visited_urls.clone(),
+            test_rx_control, // Dummy receiver for control events
+            1, // Concurrency for testing
             HttpMethod::GET,
             None, // exclude_status
             None, // include_status
@@ -735,7 +751,7 @@ mod start_scan_tests {
             .unwrap();
         let base_url = Url::parse(&server.url("/").to_string()).unwrap();
         let (tx, mut rx) = mpsc::channel(100);
-        let semaphore = Arc::new(Semaphore::new(1));
+        let _semaphore = Arc::new(Semaphore::new(1));
         let words = vec![
             "admin/".to_string(),
             "test".to_string(),
@@ -743,13 +759,17 @@ mod start_scan_tests {
         ];
         let visited_urls: Arc<Mutex<HashSet<url::Url>>> = Arc::new(Mutex::new(HashSet::new()));
 
+        // Create a dummy ControlEvent sender/receiver for testing
+        let (_test_tx_control, test_rx_control) = tokio::sync::broadcast::channel(1);
+
         start_scan(
             client,
             base_url,
             words,
             tx,
-            semaphore,
             visited_urls.clone(), // Added visited_urls argument
+            test_rx_control, // Dummy receiver for control events
+            1, // Concurrency for testing
             HttpMethod::GET,
             None, // exclude_status
             None, // include_status
@@ -800,7 +820,7 @@ mod start_scan_tests {
             .unwrap();
         let base_url = Url::parse(&server.url("/").to_string()).unwrap();
         let (tx, mut rx) = mpsc::channel(100);
-        let semaphore = Arc::new(Semaphore::new(1));
+        let _semaphore = Arc::new(Semaphore::new(1));
         let words = vec!["a/".to_string()]; // The word that will be appended
 
         let visited_urls: Arc<Mutex<HashSet<url::Url>>> = Arc::new(Mutex::new(HashSet::new()));
@@ -809,13 +829,17 @@ mod start_scan_tests {
 
         let max_depth = 2; // Set max depth to 2 to limit recursion
 
+        // Create a dummy ControlEvent sender/receiver for testing
+        let (_test_tx_control, test_rx_control) = tokio::sync::broadcast::channel(1);
+
         start_scan(
             client,
             base_url.clone(), // Clone base_url here
             words,
             tx,
-            semaphore,
             visited_urls.clone(),
+            test_rx_control, // Dummy receiver for control events
+            1, // Concurrency for testing
             HttpMethod::GET,
             None, // exclude_status
             None, // include_status

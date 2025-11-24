@@ -1,4 +1,4 @@
-use dircrab::{FuzzMode, HttpMethod, start_scan};
+use dircrab::{FuzzMode, HttpMethod, start_scan, ControlEvent}; // Added ControlEvent
 use httptest::responders;
 use httptest::{Expectation, Server, matchers::*};
 use reqwest::Client;
@@ -7,6 +7,11 @@ use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio::sync::{Mutex, Semaphore};
 use url::Url;
+use once_cell::sync::Lazy; // Added this line
+
+// Global ControlEvent sender/receiver for testing
+static TEST_CONTROL_CHANNEL: Lazy<(tokio::sync::broadcast::Sender<ControlEvent>, tokio::sync::broadcast::Receiver<ControlEvent>)> =
+    Lazy::new(|| tokio::sync::broadcast::channel(1));
 
 #[tokio::test]
 async fn test_filter_by_exact_word_count() {
@@ -23,17 +28,20 @@ async fn test_filter_by_exact_word_count() {
     let client = Client::builder().build().unwrap();
     let base_url = Url::parse(&server.url("/").to_string()).unwrap();
     let (tx, mut rx) = mpsc::channel(100);
-    let semaphore = Arc::new(Semaphore::new(1));
+    let _semaphore = Arc::new(Semaphore::new(1));
     let words = vec!["three_words".to_string(), "four_words".to_string()];
     let visited_urls: Arc<Mutex<HashSet<url::Url>>> = Arc::new(Mutex::new(HashSet::new()));
+
+    // This part will be declared globally once.
 
     start_scan(
         client,
         base_url,
         words,
         tx,
-        semaphore,
         visited_urls.clone(),
+        TEST_CONTROL_CHANNEL.1.resubscribe(), // Dummy receiver for control events
+        1, // Concurrency for testing
         HttpMethod::GET,
         None,
         None,          // include_status
@@ -84,17 +92,20 @@ async fn test_filter_by_exact_word_count_no_match() {
     let client = Client::builder().build().unwrap();
     let base_url = Url::parse(&server.url("/").to_string()).unwrap();
     let (tx, mut rx) = mpsc::channel(100);
-    let semaphore = Arc::new(Semaphore::new(1));
+    let _semaphore = Arc::new(Semaphore::new(1));
     let words = vec!["three_words".to_string(), "four_words".to_string()];
     let visited_urls: Arc<Mutex<HashSet<url::Url>>> = Arc::new(Mutex::new(HashSet::new()));
+
+    // This part will be declared globally once.
 
     start_scan(
         client,
         base_url,
         words,
         tx,
-        semaphore,
         visited_urls.clone(),
+        TEST_CONTROL_CHANNEL.1.resubscribe(), // Dummy receiver for control events
+        1, // Concurrency for testing
         HttpMethod::GET,
         None,
         None,          // include_status
@@ -145,17 +156,20 @@ async fn test_filter_by_exact_char_count() {
     let client = Client::builder().build().unwrap();
     let base_url = Url::parse(&server.url("/").to_string()).unwrap();
     let (tx, mut rx) = mpsc::channel(100);
-    let semaphore = Arc::new(Semaphore::new(1));
+    let _semaphore = Arc::new(Semaphore::new(1));
     let words = vec!["three_chars".to_string(), "four_chars".to_string()];
     let visited_urls: Arc<Mutex<HashSet<url::Url>>> = Arc::new(Mutex::new(HashSet::new()));
+
+    // This part will be declared globally once.
 
     start_scan(
         client,
         base_url,
         words,
         tx,
-        semaphore,
         visited_urls.clone(),
+        TEST_CONTROL_CHANNEL.1.resubscribe(), // Dummy receiver for control events
+        1, // Concurrency for testing
         HttpMethod::GET,
         None,
         None,          // include_status
@@ -206,17 +220,20 @@ async fn test_filter_by_exact_char_count_no_match() {
     let client = Client::builder().build().unwrap();
     let base_url = Url::parse(&server.url("/").to_string()).unwrap();
     let (tx, mut rx) = mpsc::channel(100);
-    let semaphore = Arc::new(Semaphore::new(1));
+    let _semaphore = Arc::new(Semaphore::new(1));
     let words = vec!["three_chars".to_string(), "four_chars".to_string()];
     let visited_urls: Arc<Mutex<HashSet<url::Url>>> = Arc::new(Mutex::new(HashSet::new()));
+
+    // This part will be declared globally once.
 
     start_scan(
         client,
         base_url,
         words,
         tx,
-        semaphore,
         visited_urls.clone(),
+        TEST_CONTROL_CHANNEL.1.resubscribe(), // Dummy receiver for control events
+        1, // Concurrency for testing
         HttpMethod::GET,
         None,
         None,          // include_status
@@ -267,17 +284,20 @@ async fn test_filter_by_exact_line_count() {
     let client = Client::builder().build().unwrap();
     let base_url = Url::parse(&server.url("/").to_string()).unwrap();
     let (tx, mut rx) = mpsc::channel(100);
-    let semaphore = Arc::new(Semaphore::new(1));
+    let _semaphore = Arc::new(Semaphore::new(1));
     let words = vec!["two_lines".to_string(), "three_lines".to_string()];
     let visited_urls: Arc<Mutex<HashSet<url::Url>>> = Arc::new(Mutex::new(HashSet::new()));
+
+    // This part will be declared globally once.
 
     start_scan(
         client,
         base_url,
         words,
         tx,
-        semaphore,
         visited_urls.clone(),
+        TEST_CONTROL_CHANNEL.1.resubscribe(), // Dummy receiver for control events
+        1, // Concurrency for testing
         HttpMethod::GET,
         None,          // exclude_status
         None,          // include_status
@@ -328,7 +348,7 @@ async fn test_filter_by_exact_line_count_no_match() {
     let client = Client::builder().build().unwrap();
     let base_url = Url::parse(&server.url("/").to_string()).unwrap();
     let (tx, mut rx) = mpsc::channel(100);
-    let semaphore = Arc::new(Semaphore::new(1));
+    let _semaphore = Arc::new(Semaphore::new(1));
     let words = vec!["two_lines".to_string(), "three_lines".to_string()];
     let visited_urls: Arc<Mutex<HashSet<url::Url>>> = Arc::new(Mutex::new(HashSet::new()));
 
@@ -337,8 +357,9 @@ async fn test_filter_by_exact_line_count_no_match() {
         base_url,
         words,
         tx,
-        semaphore,
         visited_urls.clone(),
+        TEST_CONTROL_CHANNEL.1.resubscribe(), // Dummy receiver for control events
+        1,               // Concurrency for testing
         HttpMethod::GET,
         None,
         None,          // include_status
@@ -397,7 +418,7 @@ async fn test_filter_by_exact_combined() {
     let client = Client::builder().build().unwrap();
     let base_url = Url::parse(&server.url("/").to_string()).unwrap();
     let (tx, mut rx) = mpsc::channel(100);
-    let semaphore = Arc::new(Semaphore::new(1));
+    let _semaphore = Arc::new(Semaphore::new(1));
     let words = vec![
         "match".to_string(),
         "no_match_words".to_string(),
@@ -411,8 +432,9 @@ async fn test_filter_by_exact_combined() {
         base_url,
         words,
         tx,
-        semaphore,
         visited_urls.clone(),
+        TEST_CONTROL_CHANNEL.1.resubscribe(), // Dummy receiver for control events
+        1,               // Concurrency for testing
         HttpMethod::GET,
         None,
         None,           // include_status
@@ -469,7 +491,7 @@ async fn test_filter_by_exclude_exact_word_count() {
     let client = Client::builder().build().unwrap();
     let base_url = Url::parse(&server.url("/").to_string()).unwrap();
     let (tx, mut rx) = mpsc::channel(100);
-    let semaphore = Arc::new(Semaphore::new(1));
+    let _semaphore = Arc::new(Semaphore::new(1));
     let words = vec!["three_words".to_string(), "four_words".to_string()];
     let visited_urls: Arc<Mutex<HashSet<url::Url>>> = Arc::new(Mutex::new(HashSet::new()));
 
@@ -478,8 +500,9 @@ async fn test_filter_by_exclude_exact_word_count() {
         base_url,
         words,
         tx,
-        semaphore,
         visited_urls.clone(),
+        TEST_CONTROL_CHANNEL.1.resubscribe(), // Dummy receiver for control events
+        1,               // Concurrency for testing
         HttpMethod::GET,
         None,
         None,          // include_status
@@ -530,7 +553,7 @@ async fn test_filter_by_exclude_exact_char_count() {
     let client = Client::builder().build().unwrap();
     let base_url = Url::parse(&server.url("/").to_string()).unwrap();
     let (tx, mut rx) = mpsc::channel(100);
-    let semaphore = Arc::new(Semaphore::new(1));
+    let _semaphore = Arc::new(Semaphore::new(1));
     let words = vec!["three_chars".to_string(), "four_chars".to_string()];
     let visited_urls: Arc<Mutex<HashSet<url::Url>>> = Arc::new(Mutex::new(HashSet::new()));
 
@@ -539,8 +562,9 @@ async fn test_filter_by_exclude_exact_char_count() {
         base_url,
         words,
         tx,
-        semaphore,
         visited_urls.clone(),
+        TEST_CONTROL_CHANNEL.1.resubscribe(), // Dummy receiver for control events
+        1,               // Concurrency for testing
         HttpMethod::GET,
         None,
         None,          // include_status
@@ -591,7 +615,7 @@ async fn test_filter_by_exclude_exact_line_count() {
     let client = Client::builder().build().unwrap();
     let base_url = Url::parse(&server.url("/").to_string()).unwrap();
     let (tx, mut rx) = mpsc::channel(100);
-    let semaphore = Arc::new(Semaphore::new(1));
+    let _semaphore = Arc::new(Semaphore::new(1));
     let words = vec!["two_lines".to_string(), "three_lines".to_string()];
     let visited_urls: Arc<Mutex<HashSet<url::Url>>> = Arc::new(Mutex::new(HashSet::new()));
 
@@ -600,8 +624,9 @@ async fn test_filter_by_exclude_exact_line_count() {
         base_url,
         words,
         tx,
-        semaphore,
         visited_urls.clone(),
+        TEST_CONTROL_CHANNEL.1.resubscribe(), // Dummy receiver for control events
+        1,               // Concurrency for testing
         HttpMethod::GET,
         None,
         None,          // include_status
@@ -660,7 +685,7 @@ async fn test_filter_by_exclude_exact_combined() {
     let client = Client::builder().build().unwrap();
     let base_url = Url::parse(&server.url("/").to_string()).unwrap();
     let (tx, mut rx) = mpsc::channel(100);
-    let semaphore = Arc::new(Semaphore::new(1));
+    let _semaphore = Arc::new(Semaphore::new(1));
     let words = vec![
         "match_all".to_string(),
         "exclude_words".to_string(),
@@ -674,8 +699,9 @@ async fn test_filter_by_exclude_exact_combined() {
         base_url,
         words,
         tx,
-        semaphore,
         visited_urls.clone(),
+        TEST_CONTROL_CHANNEL.1.resubscribe(), // Dummy receiver for control events
+        1,               // Concurrency for testing
         HttpMethod::GET,
         None,
         None,          // include_status
@@ -732,7 +758,7 @@ async fn test_start_scan_with_custom_headers() {
     let client = Client::builder().build().unwrap();
     let base_url = Url::parse(&server.url("/").to_string()).unwrap();
     let (tx, mut rx) = mpsc::channel(100);
-    let semaphore = Arc::new(Semaphore::new(1));
+    let _semaphore = Arc::new(Semaphore::new(1));
     let words = vec!["test".to_string()];
     let visited_urls: Arc<Mutex<HashSet<url::Url>>> = Arc::new(Mutex::new(HashSet::new()));
     let headers = vec!["X-Custom-Header: test".to_string()];
@@ -742,8 +768,9 @@ async fn test_start_scan_with_custom_headers() {
         base_url,
         words,
         tx,
-        semaphore,
         visited_urls.clone(),
+        TEST_CONTROL_CHANNEL.1.resubscribe(), // Dummy receiver for control events
+        1,               // Concurrency for testing
         HttpMethod::GET,
         None,
         None,
