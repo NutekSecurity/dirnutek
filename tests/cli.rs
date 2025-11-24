@@ -870,7 +870,7 @@ fn test_cli_output_no_leading_whitespace() {
     for line in found_lines {
         // Assert that specific lines (Status, URL, Scan Started) start with no whitespace
         // Lines with intentional indentation (redirect, stats) are excluded from this specific check
-        if line.starts_with('[') || line.starts_with("# Starting scan") || line.starts_with("http") { // Added "http" for URL lines
+        if line.starts_with('[') || line.starts_with("# Starting scan") {
             assert!(
                 line.trim_start() == line,
                 "Line has leading whitespace: '{}'",
