@@ -1,5 +1,4 @@
 use std::{
-    collections::VecDeque,
     io::{self, stdout},
     time::{Duration, Instant},
 };
