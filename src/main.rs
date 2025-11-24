@@ -343,28 +343,8 @@ async fn main() -> Result<()> {
                             eprintln!("Warning: {}", msg);
                         }
                     }
-                    ScanEvent::FoundUrl(full_output) => {
-                        let re = Regex::new(r"^\[(.*?)\]\s+(.*?)(?:\s+->\s+(.*?))?\s+\[(\d+W),\s*(\d+C),\s*(\d+L)\]$").unwrap();
-
-                        if let Some(captures) = re.captures(&full_output) {
-                            let status = captures.get(1).map_or("", |m| m.as_str());
-                            let url = captures.get(2).map_or("", |m| m.as_str());
-                            let redirect_target = captures.get(3).map_or("", |m| m.as_str());
-                            let words = captures.get(4).map_or("", |m| m.as_str());
-                            let chars = captures.get(5).map_or("", |m| m.as_str());
-                            let lines = captures.get(6).map_or("", |m| m.as_str());
-
-                            println!("{}", format!("[{}]", status).trim_matches(|c: char| c.is_ascii_whitespace() || c.is_control()));
-                            println!("{}", url.trim_matches(|c: char| c.is_ascii_whitespace() || c.is_control()));
-                            if !redirect_target.is_empty() {
-                                println!("  -> {}", redirect_target.trim_matches(|c: char| c.is_ascii_whitespace() || c.is_control()));
-                            }
-                            println!("  [{}, {}, {}]", words, chars, lines);
-                        } else {
-                            // Fallback if parsing fails (should not happen with correct regex)
-                            eprintln!("Warning: Could not parse full output: '{}'", full_output);
-                            println!("{}", full_output.trim_matches(|c: char| c.is_ascii_whitespace() || c.is_control()));
-                        }
+                    ScanEvent::FoundUrl(url_str) => {
+                        println!("{}", url_str);
                     }
                 }
             }
