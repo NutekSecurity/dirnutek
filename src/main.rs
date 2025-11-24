@@ -344,7 +344,7 @@ async fn main() -> Result<()> {
                         }
                     }
                     ScanEvent::FoundUrl(full_output) => {
-                        let re = Regex::new(r"^\[\d+\]\s+(.*?)(?:\s+->.*)?\s+\[.*\]$").unwrap();
+                        let re = Regex::new(r"^\[.*?\]\s+(.*?)(?:\s+->.*)?\s+\[.*\]$").unwrap();
                         if let Some(captures) = re.captures(&full_output) {
                             if let Some(url) = captures.get(1) {
                                 println!("{}", url.as_str());
