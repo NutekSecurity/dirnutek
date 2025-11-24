@@ -168,18 +168,16 @@ fn test_cli_output_formatting() {
     dbg!(&stdout_str);
 
     // Assertions for expected output
-    assert!(stdout_str.contains("[200 OK]"));
-    assert!(stdout_str.contains(&(server_url.clone() + "found")));
-    assert!(stdout_str.contains("  [0W, 0C, 0L]"));
-
-    assert!(stdout_str.contains("[301 Moved Permanently]"));
-    assert!(stdout_str.contains(&(server_url.clone() + "moved")));
-    assert!(stdout_str.contains("  -> /new_location"));
-    assert!(stdout_str.contains("  [0W, 0C, 0L]"));
-    
-    assert!(stdout_str.contains("[403 Forbidden]"));
-    assert!(stdout_str.contains(&(server_url + "forbidden")));
-    assert!(stdout_str.contains("  [0W, 0C, 0L]"));
+    assert!(stdout_str.contains(&("[200 OK] ".to_owned() + &server_url + "found [0W, 0C, 0L]")));
+    assert!(stdout_str.contains(
+        &("[301 Moved Permanently] ".to_owned()
+            + &server_url
+            + "moved -> /new_location [0W, 0C, 0L]")
+    ));
+    assert!(
+        stdout_str
+            .contains(&("[403 Forbidden] ".to_owned() + &server_url + "forbidden [0W, 0C, 0L]"))
+    );
 
     // Assert that 404 is NOT in the output
     assert!(!stdout_str.contains("[404]"));
@@ -487,17 +485,11 @@ fn test_cli_multiple_urls() {
     let stdout_str = String::from_utf8_lossy(&cmd_output);
 
     assert!(stdout_str.contains(&format!("Starting scan for URL: {}", server_url1)));
-    assert!(stdout_str.contains("[200 OK]"));
-    assert!(stdout_str.contains(&format!("{}test1", server_url1)));
-    assert!(stdout_str.contains("  [0W, 0C, 0L]"));
-    assert!(stdout_str.contains(&format!("{}test2", server_url1)));
-    assert!(stdout_str.contains("  [0W, 0C, 0L]"));
+    assert!(stdout_str.contains(&format!("[200 OK] {}test1 [0W, 0C, 0L]", server_url1)));
+    assert!(stdout_str.contains(&format!("[200 OK] {}test2 [0W, 0C, 0L]", server_url1)));
     assert!(stdout_str.contains(&format!("Starting scan for URL: {}", server_url2)));
-    assert!(stdout_str.contains("[200 OK]"));
-    assert!(stdout_str.contains(&format!("{}test1", server_url2)));
-    assert!(stdout_str.contains("  [0W, 0C, 0L]"));
-    assert!(stdout_str.contains(&format!("{}test2", server_url2)));
-    assert!(stdout_str.contains("  [0W, 0C, 0L]"));
+    assert!(stdout_str.contains(&format!("[200 OK] {}test1 [0W, 0C, 0L]", server_url2)));
+    assert!(stdout_str.contains(&format!("[200 OK] {}test2 [0W, 0C, 0L]", server_url2)));
 }
 
 #[test]
@@ -551,17 +543,11 @@ fn test_cli_urls_file() {
 
     assert!(stdout_str.contains(&format!("Reading URLs from file: {}", urls_file_path)));
     assert!(stdout_str.contains(&format!("Starting scan for URL: {}", server_url1)));
-    assert!(stdout_str.contains("[200 OK]"));
-    assert!(stdout_str.contains(&format!("{}file_test1", server_url1)));
-    assert!(stdout_str.contains("  [0W, 0C, 0L]"));
-    assert!(stdout_str.contains(&format!("{}file_test2", server_url1)));
-    assert!(stdout_str.contains("  [0W, 0C, 0L]"));
+    assert!(stdout_str.contains(&format!("[200 OK] {}file_test1 [0W, 0C, 0L]", server_url1)));
+    assert!(stdout_str.contains(&format!("[200 OK] {}file_test2 [0W, 0C, 0L]", server_url1)));
     assert!(stdout_str.contains(&format!("Starting scan for URL: {}", server_url2)));
-    assert!(stdout_str.contains("[200 OK]"));
-    assert!(stdout_str.contains(&format!("{}file_test1", server_url2)));
-    assert!(stdout_str.contains("  [0W, 0C, 0L]"));
-    assert!(stdout_str.contains(&format!("{}file_test2", server_url2)));
-    assert!(stdout_str.contains("  [0W, 0C, 0L]"));
+    assert!(stdout_str.contains(&format!("[200 OK] {}file_test1 [0W, 0C, 0L]", server_url2)));
+    assert!(stdout_str.contains(&format!("[200 OK] {}file_test2 [0W, 0C, 0L]", server_url2)));
 }
 
 #[test]
@@ -621,17 +607,11 @@ fn test_cli_results_file() {
         results_file_path
     )));
     assert!(stdout_str.contains(&format!("Starting scan for URL: {}", server_url1)));
-    assert!(stdout_str.contains("[200 OK]"));
-    assert!(stdout_str.contains(&format!("{}result_test1", server_url1)));
-    assert!(stdout_str.contains("  [0W, 0C, 0L]"));
-    assert!(stdout_str.contains(&format!("{}result_test2", server_url1)));
-    assert!(stdout_str.contains("  [0W, 0C, 0L]"));
+    assert!(stdout_str.contains(&format!("[200 OK] {}result_test1 [0W, 0C, 0L]", server_url1)));
+    assert!(stdout_str.contains(&format!("[200 OK] {}result_test2 [0W, 0C, 0L]", server_url1)));
     assert!(stdout_str.contains(&format!("Starting scan for URL: {}", server_url2)));
-    assert!(stdout_str.contains("[200 OK]"));
-    assert!(stdout_str.contains(&format!("{}result_test1", server_url2)));
-    assert!(stdout_str.contains("  [0W, 0C, 0L]"));
-    assert!(stdout_str.contains(&format!("{}result_test2", server_url2)));
-    assert!(stdout_str.contains("  [0W, 0C, 0L]"));
+    assert!(stdout_str.contains(&format!("[200 OK] {}result_test1 [0W, 0C, 0L]", server_url2)));
+    assert!(stdout_str.contains(&format!("[200 OK] {}result_test2 [0W, 0C, 0L]", server_url2)));
 }
 
 #[test]
@@ -721,29 +701,17 @@ fn test_cli_combination_urls() {
     let stdout_str = String::from_utf8_lossy(&cmd_output);
 
     assert!(stdout_str.contains(&format!("Starting scan for URL: {}", server_url1)));
-    assert!(stdout_str.contains("[200 OK]"));
-    assert!(stdout_str.contains(&format!("{}combo1", server_url1)));
-    assert!(stdout_str.contains("  [0W, 0C, 0L]"));
-    assert!(stdout_str.contains(&format!("{}combo2", server_url1)));
-    assert!(stdout_str.contains("  [0W, 0C, 0L]"));
-    assert!(stdout_str.contains(&format!("{}combo3", server_url1)));
-    assert!(stdout_str.contains("  [0W, 0C, 0L]"));
+    assert!(stdout_str.contains(&format!("[200 OK] {}combo1 [0W, 0C, 0L]", server_url1)));
+    assert!(stdout_str.contains(&format!("[200 OK] {}combo2 [0W, 0C, 0L]", server_url1)));
+    assert!(stdout_str.contains(&format!("[200 OK] {}combo3 [0W, 0C, 0L]", server_url1)));
     assert!(stdout_str.contains(&format!("Starting scan for URL: {}", server_url2)));
-    assert!(stdout_str.contains("[200 OK]"));
-    assert!(stdout_str.contains(&format!("{}combo1", server_url2)));
-    assert!(stdout_str.contains("  [0W, 0C, 0L]"));
-    assert!(stdout_str.contains(&format!("{}combo2", server_url2)));
-    assert!(stdout_str.contains("  [0W, 0C, 0L]"));
-    assert!(stdout_str.contains(&format!("{}combo3", server_url2)));
-    assert!(stdout_str.contains("  [0W, 0C, 0L]"));
+    assert!(stdout_str.contains(&format!("[200 OK] {}combo1 [0W, 0C, 0L]", server_url2)));
+    assert!(stdout_str.contains(&format!("[200 OK] {}combo2 [0W, 0C, 0L]", server_url2)));
+    assert!(stdout_str.contains(&format!("[200 OK] {}combo3 [0W, 0C, 0L]", server_url2)));
     assert!(stdout_str.contains(&format!("Starting scan for URL: {}", server_url3)));
-    assert!(stdout_str.contains("[200 OK]"));
-    assert!(stdout_str.contains(&format!("{}combo1", server_url3)));
-    assert!(stdout_str.contains("  [0W, 0C, 0L]"));
-    assert!(stdout_str.contains(&format!("{}combo2", server_url3)));
-    assert!(stdout_str.contains("  [0W, 0C, 0L]"));
-    assert!(stdout_str.contains(&format!("{}combo3", server_url3)));
-    assert!(stdout_str.contains("  [0W, 0C, 0L]"));
+    assert!(stdout_str.contains(&format!("[200 OK] {}combo1 [0W, 0C, 0L]", server_url3)));
+    assert!(stdout_str.contains(&format!("[200 OK] {}combo2 [0W, 0C, 0L]", server_url3)));
+    assert!(stdout_str.contains(&format!("[200 OK] {}combo3 [0W, 0C, 0L]", server_url3)));
 }
 
 #[test]
@@ -855,9 +823,7 @@ fn test_cli_results_file_with_comments() {
     let stdout_str = String::from_utf8_lossy(&cmd_output);
 
     assert!(stdout_str.contains(&format!("Starting scan for URL: {}test_result/", server_url)));
-    assert!(stdout_str.contains("[200 OK]"));
-    assert!(stdout_str.contains(&format!("{}test_result/word", server_url)));
-    assert!(stdout_str.contains("  [0W, 0C, 0L]"));
+    assert!(stdout_str.contains(&format!("[200 OK] {}test_result/word [0W, 0C, 0L]", server_url)));
     assert!(!stdout_str.contains("ftp://ignored.com"));
     assert!(!stdout_str.contains("# This is a comment in results"));
 }
