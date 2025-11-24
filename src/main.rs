@@ -344,7 +344,7 @@ async fn main() -> Result<()> {
                         }
                     }
                     ScanEvent::FoundUrl(url_str) => {
-                        println!("{}", url_str);
+                        println!("{}", url_str.trim());
                     }
                 }
             }
