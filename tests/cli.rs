@@ -822,12 +822,60 @@ fn test_cli_results_file_with_comments() {
 
     let stdout_str = String::from_utf8_lossy(&cmd_output);
 
-    assert!(stdout_str.contains(&format!(
-        "Starting scan for URL: {}test_result/",
-        server_url
-    )));
+    assert!(stdout_str.contains(&format!("[200 OK] {}test_result/", server_url)));
     assert!(!stdout_str.contains("ftp://ignored.com"));
     assert!(!stdout_str.contains("# This is a comment in results"));
+}
+
+#[test]
+fn test_cli_output_no_leading_whitespace() {
+    let server = Server::run();
+    server.expect(
+        Expectation::matching(request::method_path("GET", "/test_path"))
+            .respond_with(responders::status_code(200)),
+    );
+
+    let wordlist_content = "test_path\n";
+    let wordlist_file = create_temp_wordlist(wordlist_content);
+    let wordlist_path = wordlist_file.path().to_str().unwrap();
+
+    let server_url = server.url("/").to_string();
+
+    let assert = Command::cargo_bin("dircrab")
+        .expect("Failed to find dircrab binary")
+        .args(&[
+            "-u",
+            &server_url,
+            "-w",
+            wordlist_path,
+            "--method",
+            "get",
+        ])
+        .assert()
+        .success();
+
+    let output = assert.get_output();
+
+    let stdout_str = String::from_utf8_lossy(&output.stdout);
+    dbg!(&stdout_str);
+
+    let found_lines: Vec<&str> = stdout_str
+        .lines()
+        .filter(|line| line.starts_with('[') || line.starts_with("# Starting scan"))
+        .collect();
+
+    assert!(!found_lines.is_empty(), "No relevant output lines found.");
+
+    for line in found_lines {
+        // Assert that the line starts with no whitespace
+        assert!(
+            line.trim_start() == line,
+            "Line has leading whitespace: '{}'",
+            line
+        );
+        // Assert that the line is not empty after trimming
+        assert!(!line.is_empty(), "Found an empty line.");
+    }
 }
 
 mod start_scan_tests {
