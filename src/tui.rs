@@ -93,7 +93,7 @@ pub fn restore() -> io::Result<()> {
     Ok(())
 }
 
-pub async fn run_tui(terminal: &mut Tui, mut rx_events: mpsc::Receiver<ScanEvent>, _tx_control: broadcast::Sender<ControlEvent>) -> io::Result<()> {
+pub async fn run_tui(terminal: &mut Tui, mut rx_events: mpsc::Receiver<ScanEvent>, tx_control: broadcast::Sender<ControlEvent>) -> io::Result<()> {
     let mut app = App::default();
     let mut last_tick = Instant::now();
     let tick_rate = Duration::from_millis(250);
@@ -213,9 +213,13 @@ pub async fn run_tui(terminal: &mut Tui, mut rx_events: mpsc::Receiver<ScanEvent
             Some(event) = rx_events.recv() => {
                 match event {
                     ScanEvent::FoundUrl(url) => app.add_found_url(url),
-                    ScanEvent::RequestCompleted => app.requests_completed += 1,
+                    ScanEvent::RequestCompleted => {
+                        app.requests_completed += 1;
+                        app.current_word_index += 1;
+                    }
                     ScanEvent::ErrorOccurred(msg) => {
                         app.errors_occurred += 1;
+                        app.current_word_index += 1;
                         app.add_found_url(format!("Error: {}", msg));
                     },
                     ScanEvent::Warning(msg) => {
@@ -236,6 +240,9 @@ pub async fn run_tui(terminal: &mut Tui, mut rx_events: mpsc::Receiver<ScanEvent
                     if key.kind == KeyEventKind::Press {
                         match key.code {
                             KeyCode::Char('q') | KeyCode::Esc => {
+                                if let Err(e) = tx_control.send(ControlEvent::Stop) {
+                                    eprintln!("Failed to send stop signal: {}", e);
+                                }
                                 break; // Exit the TUI loop
                             }
                             KeyCode::Up => app.scroll_up(),

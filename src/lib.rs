@@ -354,10 +354,6 @@ pub async fn start_scan(
                     tokio::time::sleep(tokio::time::Duration::from_millis(d)).await;
                 }
 
-                // Send progress update
-                tx_clone.send(ScanEvent::RequestCompleted).await?;
-
-
                 let result = perform_scan(
                     &client_clone,
                     &current_url_clone,
