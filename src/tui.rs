@@ -15,7 +15,7 @@ use crossterm::{
     style::{Color, Stylize}, // Use Ratatui's Color and Stylize
     text::Line, // Import Line for explicit conversion
 };use tokio::sync::{mpsc, broadcast}; // Add broadcast
-use dircrab::{ScanEvent, ControlEvent}; // Import ControlEvent
+use dirnutek::{ScanEvent, ControlEvent}; // Import ControlEvent
 
 pub type Tui = Terminal<CrosstermBackend<io::Stdout>>;
 
@@ -193,7 +193,7 @@ fn ui(frame: &mut Frame, app: &mut App) {
     // Top section: Statistics
     let stats_block_area = layout[0];
     let stats_block = Block::default()
-        .title(Title::from(Line::from(" DirCrab TUI Dashboard ".bold())))
+        .title(Title::from(Line::from(" DirNutek TUI Dashboard ".bold())))
         .borders(Borders::ALL);
 
     // Render the stats_block itself into stats_block_area

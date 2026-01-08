@@ -13,7 +13,7 @@ use tokio::signal;
 
 mod tui;
 
-use dircrab::{FuzzMode, HttpMethod, ScanEvent, ControlEvent};
+use dirnutek::{FuzzMode, HttpMethod, ScanEvent, ControlEvent};
 
 fn parse_status_codes(s: &str) -> Result<HashSet<u16>, String> {
     s.split(',')
@@ -100,7 +100,7 @@ struct Cli {
     danger_accept_invalid_certs: bool,
 
     /// Custom User-Agent header to use for requests
-    #[arg(long, default_value = "dircrab/0.1.0")]
+    #[arg(long, default_value = "dirnutek/0.1.0")]
     user_agent: String,
 
     /// Custom headers to add to requests (e.g., "Authorization: Bearer <TOKEN>").
@@ -394,7 +394,7 @@ async fn main() -> Result<()> {
                         );
                     }
                     let visited_urls_arc = Arc::new(Mutex::new(HashSet::new()));
-                    dircrab::start_scan(
+                    dirnutek::start_scan(
                         client_clone.clone(), // Clone client for each scan
                         base_url,
                         words_clone.clone(),        // Clone words for each scan

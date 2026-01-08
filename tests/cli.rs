@@ -32,7 +32,7 @@ fn test_cli_valid_args() {
     let wordlist_file = create_temp_wordlist("word1\nword2\nword3");
     let wordlist_path = wordlist_file.path().to_str().unwrap();
 
-    Command::cargo_bin("dircrab")
+    Command::cargo_bin("dirnutek")
         .expect("Failed to find dircrab binary")
         .args(&[
             "-u",
@@ -57,7 +57,7 @@ fn test_cli_invalid_url() {
     let wordlist_file = create_temp_wordlist("word1");
     let wordlist_path = wordlist_file.path().to_str().unwrap();
 
-    Command::cargo_bin("dircrab")
+    Command::cargo_bin("dirnutek")
         .expect("Failed to find dircrab binary")
         .args(&["-u", "not-a-url", "-w", wordlist_path, "--method", "get"])
         .assert()
@@ -67,7 +67,7 @@ fn test_cli_invalid_url() {
 
 #[test]
 fn test_cli_non_existent_wordlist() {
-    Command::cargo_bin("dircrab")
+    Command::cargo_bin("dirnutek")
         .expect("Failed to find dircrab binary")
         .args(&[
             "-u",
@@ -87,7 +87,7 @@ fn test_read_empty_wordlist() {
     let wordlist_file = create_temp_wordlist("");
     let wordlist_path = wordlist_file.path().to_str().unwrap();
 
-    Command::cargo_bin("dircrab")
+    Command::cargo_bin("dirnutek")
         .expect("Failed to find dircrab binary")
         .args(&[
             "-u",
@@ -107,7 +107,7 @@ fn test_read_wordlist_with_empty_lines() {
     let wordlist_file = create_temp_wordlist("word1\n\nword2\n  \nword3");
     let wordlist_path = wordlist_file.path().to_str().unwrap();
 
-    Command::cargo_bin("dircrab")
+    Command::cargo_bin("dirnutek")
         .expect("Failed to find dircrab binary")
         .args(&[
             "-u",
@@ -149,7 +149,7 @@ fn test_cli_output_formatting() {
 
     let server_url = server.url("/").to_string();
 
-    let cmd_output = Command::cargo_bin("dircrab")
+    let cmd_output = Command::cargo_bin("dirnutek")
         .expect("Failed to find dircrab binary")
         .args(&["-u", &server_url, "-w", wordlist_path, "--method", "get"])
         .assert()
@@ -209,7 +209,7 @@ fn test_cli_status_code_filtering() {
     );
     let server_url_exclude = server_exclude.url("/").to_string();
 
-    let cmd_output_exclude = Command::cargo_bin("dircrab")
+    let cmd_output_exclude = Command::cargo_bin("dirnutek")
         .expect("Failed to find dircrab binary")
         .args(&[
             "-u",
@@ -253,7 +253,7 @@ fn test_cli_status_code_filtering() {
     );
     let server_url_include = server_include.url("/").to_string();
 
-    let cmd_output_include = Command::cargo_bin("dircrab")
+    let cmd_output_include = Command::cargo_bin("dirnutek")
         .expect("Failed to find dircrab binary")
         .args(&[
             "-u",
@@ -297,7 +297,7 @@ fn test_cli_status_code_filtering() {
     );
     let server_url_both = server_both.url("/").to_string();
 
-    let cmd_output_both = Command::cargo_bin("dircrab")
+    let cmd_output_both = Command::cargo_bin("dirnutek")
         .expect("Failed to find dircrab binary")
         .args(&[
             "-u",
@@ -363,7 +363,7 @@ async fn test_concurrency_limit() {
     let wordlist_path = wordlist_file.path().to_str().unwrap();
     let server_url = server.url("/").to_string();
 
-    Command::cargo_bin("dircrab")
+    Command::cargo_bin("dirnutek")
         .expect("Failed to find dircrab binary")
         .args(&[
             "-u",
@@ -407,7 +407,7 @@ fn test_cli_delay_option() {
     let server_url = server.url("/").to_string();
 
     let start_time = std::time::Instant::now();
-    Command::cargo_bin("dircrab")
+    Command::cargo_bin("dirnutek")
         .expect("Failed to find dircrab binary")
         .args(&[
             "-u",
@@ -464,7 +464,7 @@ fn test_cli_multiple_urls() {
     let wordlist_file = create_temp_wordlist("test1\ntest2");
     let wordlist_path = wordlist_file.path().to_str().unwrap();
 
-    let cmd_output = Command::cargo_bin("dircrab")
+    let cmd_output = Command::cargo_bin("dirnutek")
         .expect("Failed to find dircrab binary")
         .args(&[
             "-u",
@@ -523,7 +523,7 @@ fn test_cli_urls_file() {
     let wordlist_file = create_temp_wordlist("file_test1\nfile_test2");
     let wordlist_path = wordlist_file.path().to_str().unwrap();
 
-    let cmd_output = Command::cargo_bin("dircrab")
+    let cmd_output = Command::cargo_bin("dirnutek")
         .expect("Failed to find dircrab binary")
         .args(&[
             "--urls-file",
@@ -584,7 +584,7 @@ fn test_cli_results_file() {
     let wordlist_file = create_temp_wordlist("result_test1\nresult_test2");
     let wordlist_path = wordlist_file.path().to_str().unwrap();
 
-    let cmd_output = Command::cargo_bin("dircrab")
+    let cmd_output = Command::cargo_bin("dirnutek")
         .expect("Failed to find dircrab binary")
         .args(&[
             "--results-file",
@@ -619,7 +619,7 @@ fn test_cli_no_urls_provided() {
     let wordlist_file = create_temp_wordlist("word");
     let wordlist_path = wordlist_file.path().to_str().unwrap();
 
-    Command::cargo_bin("dircrab")
+    Command::cargo_bin("dirnutek")
         .expect("Failed to find dircrab binary")
         .args(&["-w", wordlist_path, "--method", "get"])
         .assert()
@@ -678,7 +678,7 @@ fn test_cli_combination_urls() {
     let wordlist_file = create_temp_wordlist("combo1\ncombo2\ncombo3");
     let wordlist_path = wordlist_file.path().to_str().unwrap();
 
-    let cmd_output = Command::cargo_bin("dircrab")
+    let cmd_output = Command::cargo_bin("dirnutek")
         .expect("Failed to find dircrab binary")
         .args(&[
             "-u",
@@ -723,7 +723,7 @@ fn test_cli_unsupported_scheme() {
     let urls_file = create_temp_urls_file(&urls_content);
     let urls_file_path = urls_file.path().to_str().unwrap();
 
-    Command::cargo_bin("dircrab")
+    Command::cargo_bin("dirnutek")
         .expect("Failed to find dircrab binary")
         .args(&[
             "--urls-file",
@@ -762,7 +762,7 @@ fn test_cli_urls_file_with_comments() {
     let wordlist_file = create_temp_wordlist("word");
     let wordlist_path = wordlist_file.path().to_str().unwrap();
 
-    let cmd_output = Command::cargo_bin("dircrab")
+    let cmd_output = Command::cargo_bin("dirnutek")
         .expect("Failed to find dircrab binary")
         .args(&[
             "--urls-file",
@@ -804,7 +804,7 @@ fn test_cli_results_file_with_comments() {
     let wordlist_file = create_temp_wordlist("word");
     let wordlist_path = wordlist_file.path().to_str().unwrap();
 
-    let cmd_output = Command::cargo_bin("dircrab")
+    let cmd_output = Command::cargo_bin("dirnutek")
         .expect("Failed to find dircrab binary")
         .args(&[
             "--results-file",
@@ -842,7 +842,7 @@ fn test_cli_output_no_leading_whitespace() {
 
     let server_url = server.url("/").to_string();
 
-    let assert = Command::cargo_bin("dircrab")
+    let assert = Command::cargo_bin("dirnutek")
         .expect("Failed to find dircrab binary")
         .args(&[
             "-u",
@@ -884,7 +884,7 @@ fn test_cli_output_no_leading_whitespace() {
 
 mod start_scan_tests {
     use bstr::{B, ByteSlice};
-    use dircrab::{HttpMethod, FuzzMode, start_scan, ControlEvent}; // Added ControlEvent
+    use dirnutek::{HttpMethod, FuzzMode, start_scan, ControlEvent}; // Added ControlEvent
     use httptest::matchers::*;
     use httptest::responders;
     use httptest::{Expectation, Server};
@@ -968,14 +968,14 @@ static TEST_CONTROL_CHANNEL: Lazy<(tokio::sync::broadcast::Sender<ControlEvent>,
         }
 
         assert!(
-            received_messages.iter().any(|e| matches!(e, dircrab::ScanEvent::FoundUrl(s) if s == &format!("[200 OK] {} [0W, 0C, 0L]", server.url("/admin/"))))
+            received_messages.iter().any(|e| matches!(e, dirnutek::ScanEvent::FoundUrl(s) if s == &format!("[200 OK] {} [0W, 0C, 0L]", server.url("/admin/"))))
         );
         assert!(
-            received_messages.iter().any(|e| matches!(e, dircrab::ScanEvent::FoundUrl(s) if s == &format!("[200 OK] {} [0W, 0C, 0L]", server.url("/test"))))
+            received_messages.iter().any(|e| matches!(e, dirnutek::ScanEvent::FoundUrl(s) if s == &format!("[200 OK] {} [0W, 0C, 0L]", server.url("/test"))))
         );
         // Should not contain /admin/users as recursion depth is 1
         assert!(
-            !received_messages.iter().any(|e| matches!(e, dircrab::ScanEvent::FoundUrl(s) if s == &format!("[200 OK] {}", server.url("/admin/users"))))
+            !received_messages.iter().any(|e| matches!(e, dirnutek::ScanEvent::FoundUrl(s) if s == &format!("[200 OK] {}", server.url("/admin/users"))))
         );
     }
 
@@ -1039,7 +1039,7 @@ static TEST_CONTROL_CHANNEL: Lazy<(tokio::sync::broadcast::Sender<ControlEvent>,
         let mut received_found_urls = Vec::new();
         // Consume all events until ScanFinished
         while let Some(msg) = rx.recv().await {
-            if let dircrab::ScanEvent::FoundUrl(s) = msg {
+            if let dirnutek::ScanEvent::FoundUrl(s) = msg {
                 received_found_urls.push(s);
             }
         }
@@ -1148,10 +1148,10 @@ static TEST_CONTROL_CHANNEL: Lazy<(tokio::sync::broadcast::Sender<ControlEvent>,
         }
 
         assert!(
-            received_messages.iter().any(|e| matches!(e, dircrab::ScanEvent::FoundUrl(s) if s == &format!("[200 OK] http://word1.example.com/ [0W, 0C, 0L]")))
+            received_messages.iter().any(|e| matches!(e, dirnutek::ScanEvent::FoundUrl(s) if s == &format!("[200 OK] http://word1.example.com/ [0W, 0C, 0L]")))
         );
         assert!(
-            received_messages.iter().any(|e| matches!(e, dircrab::ScanEvent::FoundUrl(s) if s == &format!("[200 OK] http://word2.example.com/ [0W, 0C, 0L]")))
+            received_messages.iter().any(|e| matches!(e, dirnutek::ScanEvent::FoundUrl(s) if s == &format!("[200 OK] http://word2.example.com/ [0W, 0C, 0L]")))
         );
     }
 
@@ -1210,11 +1210,11 @@ static TEST_CONTROL_CHANNEL: Lazy<(tokio::sync::broadcast::Sender<ControlEvent>,
             received_messages.push(msg);
         }
 
-        assert!(received_messages.iter().any(|e| matches!(e, dircrab::ScanEvent::FoundUrl(s) if s == &format!(
+        assert!(received_messages.iter().any(|e| matches!(e, dirnutek::ScanEvent::FoundUrl(s) if s == &format!(
             "[200 OK] {}?param=word1 [0W, 0C, 0L]",
             server.url("/")
         ))));
-        assert!(received_messages.iter().any(|e| matches!(e, dircrab::ScanEvent::FoundUrl(s) if s == &format!(
+        assert!(received_messages.iter().any(|e| matches!(e, dirnutek::ScanEvent::FoundUrl(s) if s == &format!(
             "[200 OK] {}?param=word2 [0W, 0C, 0L]",
             server.url("/")
         ))));
@@ -1242,7 +1242,7 @@ fn test_cli_with_custom_headers() {
 
     let server_url = server.url("/").to_string();
 
-    Command::cargo_bin("dircrab")
+    Command::cargo_bin("dirnutek")
         .expect("Failed to find dircrab binary")
         .args(&[
             "-u",

@@ -1,8 +1,13 @@
 [package]
-name = "dircrab"
+name = "dirnutek"
 version = "0.1.0"
 edition = "2024"
 authors = ["Neosb <neosb@nuteksecurity.com>"]
+description = "A command-line tool for discovering web directories and files."
+license-file = "LICENSE"
+repository = "https://github.com/NutekSecurity/dircrab"
+homepage = "https://github.com/NutekSecurity/dircrab"
+readme = "README.md"
 
 [dependencies]
 anyhow = "1.0.100"

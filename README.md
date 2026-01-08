@@ -1,12 +1,12 @@
-# `DirCrab` - A High-Speed, Professional Web Fuzzer
+# `DirNutek` - A High-Speed, Professional Web Fuzzer
 
-`DirCrab` is a blazing-fast, concurrent directory and file scanner for web servers, designed to be a professional-grade tool for web reconnaissance. It started as a fun "chillout" project to master asynchronous Rust and has evolved into a powerful fuzzer capable of discovering hidden content and potential vulnerabilities.
+`DirNutek` is a blazing-fast, concurrent directory and file scanner for web servers, designed to be a professional-grade tool for web reconnaissance. It started as a fun "chillout" project to master asynchronous Rust and has evolved into a powerful fuzzer capable of discovering hidden content and potential vulnerabilities.
 
 ---
 
 ## Development Roadmap
 
-This roadmap outlines the development plan for `DirCrab`, transforming it from a powerful scanner into a full-featured, professional web fuzzing tool.
+This roadmap outlines the development plan for `DirNutek`, transforming it from a powerful scanner into a full-featured, professional web fuzzing tool.
 
 ### **Phase 1: Core Engine (Completed)**
 
@@ -31,10 +31,10 @@ This phase focuses on expanding the fuzzer's capabilities to handle more complex
         *   Introduce a `FUZZ` keyword that can be placed anywhere in the URL.
         *   **Parameter Fuzzing:**
             *   **Use Case:** Discovering vulnerabilities like SQL injection or Cross-Site Scripting (XSS) by fuzzing URL parameters.
-            *   **Example:** `dircrab -u "http://example.com/page?id=FUZZ" -w sqli.txt`
+            *   **Example:** `dirnutek -u "http://example.com/page?id=FUZZ" -w sqli.txt`
         *   **Subdomain Fuzzing:**
             *   **Use Case:** Discovering hidden or forgotten subdomains.
-            *   **Example:** `dircrab -u "http://FUZZ.example.com" -w subdomains.txt`
+            *   **Example:** `dirnutek -u "http://FUZZ.example.com" -w subdomains.txt`
     *   **CLI:** The `-u` flag will be enhanced to detect the `FUZZ` keyword and adapt the fuzzing strategy accordingly.
 
 *   ✅ **Custom Headers & Authentication:**
@@ -53,13 +53,13 @@ This phase focuses on expanding the fuzzer's capabilities to handle more complex
         *   Add a `-d, --data` flag to specify the request body.
         *   If the `FUZZ` keyword is present in the data, the fuzzer will replace it with words from the wordlist.
     *   **Use Case:** Finding vulnerabilities in forms and API endpoints that accept `POST` requests.
-    *   **Example:** `dircrab -u http://example.com/login -d '{"username":"admin","password":"FUZZ"}' -w passwords.txt -X POST`
+    *   **Example:** `dirnutek -u http://example.com/login -d '{"username":"admin","password":"FUZZ"}' -w passwords.txt -X POST`
 
 ---
 
 ### **Phase 3: Professional Tooling & Output (To Do)**
 
-This phase focuses on features that make `DirCrab` a professional-grade tool that can be integrated into larger security workflows.
+This phase focuses on features that make `DirNutek` a professional-grade tool that can be integrated into larger security workflows.
 
 *   ✅ **Advanced Reporting:**
     *   **Goal:** Provide machine-readable output formats for easy parsing and integration with other tools.
@@ -83,7 +83,7 @@ This phase focuses on features that make `DirCrab` a professional-grade tool tha
 
 ### **Phase 4: The "Show-Off" Features (Future)**
 
-This phase includes features that will make `DirCrab` a truly top-tier tool.
+This phase includes features that will make `DirNutek` a truly top-tier tool.
 
 *   **[FUTURE] Interactive TUI Dashboard:**
     *   **Goal:** Provide a real-time view of the scan's progress.
@@ -109,7 +109,7 @@ This phase includes features that will make `DirCrab` a truly top-tier tool.
 
 ## Original Project Idea & Implementation Notes
 
-The following sections detail the original project idea and implementation notes, which serve as the foundation for the current and future development of `DirCrab`.
+The following sections detail the original project idea and implementation notes, which serve as the foundation for the current and future development of `DirNutek`.
 
 ### Core Features (The "MVP")
 
@@ -142,14 +142,14 @@ The following sections detail the original project idea and implementation notes
     *   A live-updating list of "Found" results.
     *   Total progress (e.g., "Request 10,234 / 50,000").
 
-### Implementation Plan: `DirCrab`
+### Implementation Plan: `DirNutek`
 
-This plan outlines a structured approach to building `DirCrab`, starting with the Minimum Viable Product (MVP) and then progressively adding "Show-Off" bonus features.
+This plan outlines a structured approach to building `DirNutek`, starting with the Minimum Viable Product (MVP) and then progressively adding "Show-Off" bonus features.
 
 #### Phase 1: Project Setup & MVP
 
 1.  ✅ **Project Initialization:**
-    *   ✅ Create a new Rust project: `cargo new dircrab --bin`
+    *   ✅ Create a new Rust project: `cargo new dirnutek --bin`
     *   ✅ Add dependencies to `Cargo.toml`:
         ```toml
         [dependencies]
@@ -213,9 +213,9 @@ This plan outlines a structured approach to building `DirCrab`, starting with th
     *   Integrate `ratatui` to draw a terminal UI.
     *   Use `tokio::sync::mpsc` channels to send updates (RPS, new findings, progress) from the scanning tasks to the TUI rendering loop.
     *   Display:
-        *   Requests per second (RPS) - calculate based on completed requests over time.
+        *   Requests per second (RPS).
         *   A live-updating list of "Found" results.
-        *   Total progress (e.g., "Request X / Y" or percentage).
+        *   Total progress (e.g., "Request 10,234 / 50,000").
     *   **Consideration:** `ratatui` requires careful state management and event handling. Start with a very basic display and incrementally add complexity. Ensure the TUI doesn't block the scanning process.
 
 #### Phase 3: Error Handling & Refinements
@@ -226,7 +226,7 @@ This plan outlines a structured approach to building `DirCrab`, starting with th
     *   Handle specific `reqwest` errors (e.g., network issues, DNS resolution failures).
 
 2.  **Configuration:**
-    *   Consider a configuration file (e.g., `dircrab.toml`) for default settings.
+    *   Consider a configuration file (e.g., `dirnutek.toml`) for default settings.
 
 3.  **Performance Optimization:**
     *   Profile the application to identify bottlenecks.
@@ -246,7 +246,7 @@ This plan outlines a structured approach to building `DirCrab`, starting with th
 *   ✅ **User-Agent:** Set a custom User-Agent header to identify your scanner.
 *   ✅ **SSL/TLS:** `reqwest` handles this by default, but be aware of potential issues with self-signed certificates or older TLS versions.
 
-This plan provides a roadmap for building `DirCrab`. Remember to iterate, test frequently, and enjoy the process of mastering asynchronous Rust!
+This plan provides a roadmap for building `DirNutek`. Remember to iterate, test frequently, and enjoy the process of mastering asynchronous Rust!
 
 ## Notes
 
@@ -333,7 +333,7 @@ This plan provides a roadmap for building `DirCrab`. Remember to iterate, test f
 
 3.  **Configuring Redirect Behavior (in `src/main.rs` and `src/lib.rs` tests)**:
     *   **How**: The `Client::builder()` is configured with `.redirect(reqwest::redirect::Policy::none())`.
-    *   **When**: This is crucial for a web scanner like `dircrab`. By default, `reqwest` would automatically follow HTTP redirects (like 301, 302). However, `dircrab` needs to explicitly observe these redirect status codes to report them and potentially use the redirect target for further scanning. Disabling automatic redirects ensures that the `perform_scan` function receives the initial response status code.
+    *   **When**: This is crucial for a web scanner like `dirnutek`. By default, `reqwest` would automatically follow HTTP redirects (like 301, 302). However, `dirnutek` needs to explicitly observe these redirect status codes to report them and potentially use the redirect target for further scanning. Disabling automatic redirects ensures that the `perform_scan` function receives the initial response status code.
 
 4.  **Handling Responses (in `src/lib.rs`)**:
     *   **How**: After sending a request, the `res` object (of type `reqwest::Response`) is used to extract information such as:
