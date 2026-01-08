@@ -93,123 +93,22 @@ pub fn restore() -> io::Result<()> {
     Ok(())
 }
 
-pub async fn run_tui(terminal: &mut Tui, mut rx_events: mpsc::Receiver<ScanEvent>, tx_control: broadcast::Sender<ControlEvent>) -> io::Result<()> {
+pub async fn run_tui(
+    terminal: &mut Tui,
+    mut rx_events: mpsc::Receiver<ScanEvent>,
+    tx_control: broadcast::Sender<ControlEvent>,
+) -> io::Result<()> {
     let mut app = App::default();
-    let mut last_tick = Instant::now();
     let tick_rate = Duration::from_millis(250);
-
-    let (tx_key_events, mut rx_key_events) = mpsc::channel(100);
-
-    // Spawn a blocking task to read crossterm events
-    tokio::spawn(async move {
-        loop {
-            if let Ok(event) = event::read() {
-                if tx_key_events.send(event).await.is_err() {
-                    // Receiver dropped, exit task
-                    break;
-                }
-            }
-        }
-    });
+    let mut should_exit = false; // Local flag to control loop exit
 
     loop {
-        terminal.draw(|frame| {
-            let layout = Layout::default()
-                .direction(Direction::Vertical)
-                .constraints([Constraint::Percentage(30), Constraint::Percentage(70)])
-                .split(frame.size());
+        terminal.draw(|frame| ui(frame, &mut app))?;
 
-            // Top section: Statistics
-            let stats_block_area = layout[0];
-            let stats_block = Block::default()
-                .title(Title::from(Line::from(" DirCrab TUI Dashboard ".bold())))
-                .borders(Borders::ALL);
-            
-            // Render the stats_block itself into stats_block_area
-            frame.render_widget(stats_block.clone(), stats_block_area);
+        let timeout = tick_rate; // The timeout for the general tick.
 
-            // Now, split the *inner area* of the rendered stats_block
-            let inner_stats_area = stats_block.inner(stats_block_area);
-            
-            let stats_layout = Layout::default()
-                .direction(Direction::Horizontal)
-                .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
-                .split(inner_stats_area);
-
-            let stats_table_rows = vec![
-                Row::new(vec![
-                    Cell::from("Progress:").bold(),
-                    Cell::from(format!("{:.2}%", if app.scan_stopped || app.scan_finished { 100.0 } else { app.progress() })).fg(Color::Green),
-                ]),
-                Row::new(vec![
-                    Cell::from("Words Processed:").bold(),
-                    Cell::from(format!("{}/{}", app.current_word_index, app.total_words)),
-                ]),
-                Row::new(vec![
-                    Cell::from("RPS:").bold(),
-                    Cell::from(format!("{:.2}", if app.scan_stopped || app.scan_finished { 0.0 } else { app.rps() })).fg(Color::Blue),
-                ]),
-                Row::new(vec![
-                    Cell::from("Errors:").bold(),
-                    Cell::from(format!("{}", app.errors_occurred)).fg(Color::Red),
-                ]),
-            ];
-
-            let stats_table = Table::new(
-                stats_table_rows,
-                [Constraint::Length(18), Constraint::Min(10)],
-            )
-                .column_spacing(1);
-            
-            frame.render_widget(stats_table, stats_layout[0]);
-
-            let status_text = if app.scan_finished {
-                Line::from("Scan Finished!".green().bold())
-            } else if app.scan_stopped {
-                Line::from("Scan Stopped!".red().bold())
-            } else {
-                Line::from("Scanning...".yellow().bold())
-            };
-            let status_widget = Paragraph::new(status_text);
-            frame.render_widget(status_widget, stats_layout[1]);
-
-
-            // Bottom section: Found URLs
-            let found_urls_block = Block::default()
-                .title(Title::from(Line::from(" Found URLs ".bold())))
-                .borders(Borders::ALL);
-
-            let items: Vec<ListItem> = app.found_urls
-                .iter()
-                .rev()
-                .map(|u| {
-                    let mut item = ListItem::new(u.clone());
-                    if u.starts_with("Error:") {
-                        item = item.style(Style::default().fg(Color::Red));
-                    } else if u.starts_with("Warning:") {
-                        item = item.style(Style::default().fg(Color::Yellow));
-                    } else {
-                        item = item.style(Style::default().fg(Color::Green));
-                    }
-                    item
-                })
-                .collect();
-            let found_urls_list = List::new(items)
-                .block(found_urls_block)
-                .highlight_style(Style::default().fg(Color::LightBlue).bold())
-                .highlight_symbol(">> ")
-                .repeat_highlight_symbol(true)
-                .direction(ratatui::widgets::ListDirection::TopToBottom);
-
-            let mut list_state = app.list_state.clone(); // Clone to render, state will be updated in event loop
-            frame.render_stateful_widget(found_urls_list, layout[1], &mut list_state);
-        })?;
-
-        let timeout = tick_rate.checked_sub(last_tick.elapsed()).unwrap_or_else(|| Duration::from_secs(0));
         tokio::select! {
-            _ = tokio::time::sleep(timeout) => {
-                last_tick = Instant::now();
-            }
+            // 1. Scan events
             Some(event) = rx_events.recv() => {
                 match event {
                     ScanEvent::FoundUrl(url) => app.add_found_url(url),
@@ -232,33 +131,162 @@ pub async fn run_tui(terminal: &mut Tui, mut rx_events: mpsc::Receiver<ScanEvent
                         app.scan_stopped = false;
                     },
                     ScanEvent::ScanFinished => app.scan_finished = true,
-                    ScanEvent::ScanStopped => app.scan_stopped = true, // Handle the new event
+                    ScanEvent::ScanStopped => app.scan_stopped = true,
                 }
-            }
-            Some(key_event) = rx_key_events.recv() => {
-                if let Event::Key(key) = key_event {
-                    if key.kind == KeyEventKind::Press {
-                        match key.code {
-                            KeyCode::Char('q') | KeyCode::Esc => {
-                                if let Err(e) = tx_control.send(ControlEvent::Stop) {
-                                    eprintln!("Failed to send stop signal: {}", e);
+            },
+
+            // 2. Keyboard events: Poll for key event readiness, then read if ready.
+            // Encapsulated in an async block to make it a future for tokio::select!
+            _ = async {
+                // Non-blocking poll: checks if an event is available without waiting.
+                // Duration::from_millis(0) makes it truly non-blocking.
+                if event::poll(Duration::from_millis(0)).map_err(|e| eprintln!("Error polling event: {}", e)).unwrap_or(false) {
+                    // If poll returns true, an event is ready to be read.
+                    // event::read() can be blocking, but since we know an event is ready,
+                    // it should return immediately. If it somehow blocks, it will block this async block,
+                    // but not the entire tokio runtime (as other select arms can still make progress).
+                    if let Ok(Event::Key(key)) = event::read() {
+                        if key.kind == KeyEventKind::Press {
+                            match key.code {
+                                KeyCode::Char('q') | KeyCode::Esc => {
+                                    if !app.scan_stopped {
+                                        if let Err(e) = tx_control.send(ControlEvent::Stop) {
+                                            eprintln!("Failed to send stop signal: {}", e);
+                                        }
+                                    }
+                                    should_exit = true; // Signal outer loop to exit
                                 }
-                                break; // Exit the TUI loop
+                                KeyCode::Up => app.scroll_up(),
+                                KeyCode::Down => app.scroll_down(),
+                                KeyCode::PageUp => app.scroll_page_up(),
+                                KeyCode::PageDown => app.scroll_page_down(),
+                                KeyCode::Home => app.scroll_to_top(),
+                                KeyCode::End => app.scroll_to_bottom(),
+                                _ => {}
                             }
-                            KeyCode::Up => app.scroll_up(),
-                            KeyCode::Down => app.scroll_down(),
-                            KeyCode::PageUp => app.scroll_page_up(),
-                            KeyCode::PageDown => app.scroll_page_down(),
-                            KeyCode::Home => app.scroll_to_top(),
-                            KeyCode::End => app.scroll_to_bottom(),
-                            _ => {}
                         }
                     }
                 }
-            }
+                // Small sleep to yield control, preventing busy-looping when no events are ready.
+                // This ensures the executor can pick other tasks even if event::poll is continuously false.
+                tokio::time::sleep(Duration::from_millis(1)).await;
+            } => {}, // This arm completes when its async block finishes.
+
+            // 3. Tick timer as a fallback if no events are received from other sources or processed
+            // This ensures the UI updates regularly.
+            _ = tokio::time::sleep(timeout) => {}
+        }
+
+        if should_exit {
+            break; // Exit the main loop
         }
     }
-    Ok(())
+    Ok(()) // run_tui returns
+}
+
+fn ui(frame: &mut Frame, app: &mut App) {
+    let layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Percentage(30), Constraint::Percentage(70)])
+        .split(frame.size());
+
+    // Top section: Statistics
+    let stats_block_area = layout[0];
+    let stats_block = Block::default()
+        .title(Title::from(Line::from(" DirCrab TUI Dashboard ".bold())))
+        .borders(Borders::ALL);
+
+    // Render the stats_block itself into stats_block_area
+    frame.render_widget(stats_block.clone(), stats_block_area);
+
+    // Now, split the *inner area* of the rendered stats_block
+    let inner_stats_area = stats_block.inner(stats_block_area);
+
+    let stats_layout = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+        .split(inner_stats_area);
+
+    let stats_table_rows = vec![
+        Row::new(vec![
+            Cell::from("Progress:").bold(),
+            Cell::from(format!(
+                "{:.2}%",
+                if app.scan_stopped || app.scan_finished {
+                    100.0
+                } else {
+                    app.progress()
+                }
+            ))
+            .fg(Color::Green),
+        ]),
+        Row::new(vec![
+            Cell::from("Words Processed:").bold(),
+            Cell::from(format!("{}/{}", app.current_word_index, app.total_words)),
+        ]),
+        Row::new(vec![
+            Cell::from("RPS:").bold(),
+            Cell::from(format!(
+                "{:.2}",
+                if app.scan_stopped || app.scan_finished {
+                    0.0
+                } else {
+                    app.rps()
+                }
+            ))
+            .fg(Color::Blue),
+        ]),
+        Row::new(vec![
+            Cell::from("Errors:").bold(),
+            Cell::from(format!("{}", app.errors_occurred)).fg(Color::Red),
+        ]),
+    ];
+
+    let stats_table =
+        Table::new(stats_table_rows, [Constraint::Length(18), Constraint::Min(10)]).column_spacing(1);
+
+    frame.render_widget(stats_table, stats_layout[0]);
+
+    let status_text = if app.scan_finished {
+        Line::from(vec!["Scan Finished! ".green().bold(), "('q' to exit)".into()])
+    } else if app.scan_stopped {
+        Line::from(vec!["Scan Stopped! ".red().bold(), "('q' to exit)".into()])
+    } else {
+        Line::from("Scanning...".yellow().bold())
+    };
+    let status_widget = Paragraph::new(status_text);
+    frame.render_widget(status_widget, stats_layout[1]);
+
+
+    // Bottom section: Found URLs
+    let found_urls_block = Block::default()
+        .title(Title::from(Line::from(" Found URLs ".bold())))
+        .borders(Borders::ALL);
+
+    let items: Vec<ListItem> = app
+        .found_urls
+        .iter()
+        .rev()
+        .map(|u| {
+            let mut item = ListItem::new(u.clone());
+            if u.starts_with("Error:") {
+                item = item.style(Style::default().fg(Color::Red));
+            } else if u.starts_with("Warning:") {
+                item = item.style(Style::default().fg(Color::Yellow));
+            } else {
+                item = item.style(Style::default().fg(Color::Green));
+            }
+            item
+        })
+        .collect();
+    let found_urls_list = List::new(items)
+        .block(found_urls_block)
+        .highlight_style(Style::default().fg(Color::LightBlue).bold())
+        .highlight_symbol(">> ")
+        .repeat_highlight_symbol(true)
+        .direction(ratatui::widgets::ListDirection::TopToBottom);
+
+    frame.render_stateful_widget(found_urls_list, layout[1], &mut app.list_state);
 }
 
 impl App {

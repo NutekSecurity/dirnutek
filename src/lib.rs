@@ -269,7 +269,7 @@ pub async fn start_scan(
     words: Vec<String>,
     tx: Sender<ScanEvent>,
     visited_urls: Arc<Mutex<HashSet<url::Url>>>,
-    _ctrl_rx: broadcast::Receiver<ControlEvent>,
+    mut ctrl_rx: broadcast::Receiver<ControlEvent>,
     concurrency: usize,
     http_method: HttpMethod,
     exclude_status: Option<HashSet<u16>>,
@@ -292,12 +292,15 @@ pub async fn start_scan(
     let mut join_set: JoinSet<Result<()>> = JoinSet::new();
 
     // Send ScanStarted event
-    tx.send(ScanEvent::ScanStarted { total_words: words.len() }).await?;
+    tx.send(ScanEvent::ScanStarted {
+        total_words: words.len(),
+    })
+    .await?;
 
     // Initial push to the queue
     scan_queue.lock().await.push_back((base_url.clone(), 0));
 
-    loop {
+    'main_loop: loop {
         // Dequeue a URL to scan if available
         let (current_url, current_depth) = {
             let mut queue = scan_queue.lock().await;
@@ -311,8 +314,16 @@ pub async fn start_scan(
                 // This allows new URLs to be added to the queue by other tasks
                 drop(queue); // Release the lock before awaiting
                 tokio::select! {
-                    _ = tokio::time::sleep(tokio::time::Duration::from_millis(100)) => {},
-                    _ = join_set.join_next() => {},
+                    biased;
+                    _ = ctrl_rx.recv() => {
+                        tx.send(ScanEvent::ScanStopped).await?;
+                        join_set.abort_all();
+                        break 'main_loop;
+                    }
+                    _ = join_set.join_next() => {
+                        // A task finished, maybe it populated the queue.
+                        // The loop will continue and check the queue again.
+                    }
                 }
                 continue;
             }
@@ -323,10 +334,21 @@ pub async fn start_scan(
         }
 
         for word in &words {
+            let permit = tokio::select! {
+                biased;
+                _ = ctrl_rx.recv() => {
+                    tx.send(ScanEvent::ScanStopped).await?;
+                    join_set.abort_all();
+                    break 'main_loop;
+                }
+                permit = semaphore.clone().acquire_owned() => {
+                    permit.expect("Failed to acquire semaphore permit")
+                }
+            };
+
             let client_clone = client.clone();
             let current_url_clone = current_url.clone();
             let tx_clone = tx.clone();
-            let semaphore_clone = semaphore.clone();
             let exclude_status_clone = exclude_status.clone();
             let include_status_clone = include_status.clone();
             let word_clone = word.clone();
@@ -345,11 +367,6 @@ pub async fn start_scan(
             let data_clone = data.clone();
 
             join_set.spawn(async move {
-                let _permit = semaphore_clone
-                    .acquire()
-                    .await
-                    .expect("Failed to acquire semaphore permit");
-
                 if let Some(d) = scan_delay_clone {
                     tokio::time::sleep(tokio::time::Duration::from_millis(d)).await;
                 }
@@ -374,6 +391,9 @@ pub async fn start_scan(
                     &data_clone,
                 )
                 .await;
+                
+                drop(permit);
+
 
                 if let Ok(Some(found_url)) = result {
                     let mut visited = visited_urls_clone.lock().await;
@@ -386,7 +406,6 @@ pub async fn start_scan(
                         }
                     }
                 } else if let Err(e) = result {
-                    // tx_clone.send(ScanEvent::ErrorOccurred).await?; // Error already sent by perform_scan
                     eprintln!(
                         "Error from perform_scan for {} + {}: {:?}",
                         current_url_clone, word_clone, e
@@ -409,7 +428,6 @@ pub async fn start_scan(
 
     Ok(())
 }
-
 #[cfg(test)]
 mod tests {
     use httptest::responders;
