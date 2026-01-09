@@ -16,21 +16,17 @@ jobs:
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
             artifact_name: dirnutek-${{ github.ref_name }}-x86_64-unknown-linux-gnu.tar.gz
-            archive_command: tar -czvf
           # macOS
           - target: x86_64-apple-darwin
             os: macos-latest
             artifact_name: dirnutek-${{ github.ref_name }}-x86_64-apple-darwin.tar.gz
-            archive_command: tar -czvf
           - target: aarch64-apple-darwin
             os: macos-latest
             artifact_name: dirnutek-${{ github.ref_name }}-aarch64-apple-darwin.tar.gz
-            archive_command: tar -czvf
           # Windows
           - target: x86_64-pc-windows-msvc
             os: windows-latest
             artifact_name: dirnutek-${{ github.ref_name }}-x86_64-pc-windows-msvc.zip
-            archive_command: zip -r
 
     steps:
       - name: Checkout code
@@ -49,11 +45,14 @@ jobs:
           command: build
           args: --release --target ${{ matrix.target }}
 
-      - name: Archive release binary
-        shell: bash
-        run: |
-          ${{ matrix.archive_command }} ${{ matrix.artifact_name }} ./target/${{ matrix.target }}/release/dirnutek${{ matrix.target == 'x86_64-pc-windows-msvc' && '.exe' || '' }}
-        # For Windows, the executable name will be 'dirnutek.exe'
+      - name: Archive release binary (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: tar -czvf ${{ matrix.artifact_name }} -C ./target/${{ matrix.target }}/release/ dirnutek
+
+      - name: Archive release binary (Windows)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: Compress-Archive -Path ./target/${{ matrix.target }}/release/dirnutek.exe -DestinationPath ${{ matrix.artifact_name }}
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
