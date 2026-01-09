@@ -2,6 +2,12 @@
 
 # `DirNutek` - A High-Speed, Professional Web Fuzzer
 
+![Crates.io Total Downloads](https://img.shields.io/crates/d/dirnutek)
+
+![Crates.io Downloads (latest version)](https://img.shields.io/crates/dv/dirnutek)
+
+![Crates.io Version](https://img.shields.io/crates/v/dirnutek)
+
 `DirNutek` is a blazing-fast, concurrent directory and file scanner for web servers, designed to be a professional-grade tool for web reconnaissance. It started as a fun "chillout" project to master asynchronous Rust and has evolved into a powerful fuzzer capable of discovering hidden content and potential vulnerabilities.
 
 ![DirNutek Terminal Recording](terminal-recording.gif)
