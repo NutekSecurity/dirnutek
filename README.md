@@ -1,3 +1,5 @@
+[Support the Developer](https://paypal.me/neosb)
+
 # `DirNutek` - A High-Speed, Professional Web Fuzzer
 
 `DirNutek` is a blazing-fast, concurrent directory and file scanner for web servers, designed to be a professional-grade tool for web reconnaissance. It started as a fun "chillout" project to master asynchronous Rust and has evolved into a powerful fuzzer capable of discovering hidden content and potential vulnerabilities.
