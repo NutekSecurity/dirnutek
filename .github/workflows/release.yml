@@ -15,21 +15,21 @@ jobs:
           # Linux
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
-            artifact_name: dirnutek-${{ github.ref_name }}-${{ matrix.target }}.tar.gz
+            artifact_name: dirnutek-${{ github.ref_name }}-x86_64-unknown-linux-gnu.tar.gz
             archive_command: tar -czvf
           # macOS
           - target: x86_64-apple-darwin
             os: macos-latest
-            artifact_name: dirnutek-${{ github.ref_name }}-${{ matrix.target }}.tar.gz
+            artifact_name: dirnutek-${{ github.ref_name }}-x86_64-apple-darwin.tar.gz
             archive_command: tar -czvf
           - target: aarch64-apple-darwin
             os: macos-latest
-            artifact_name: dirnutek-${{ github.ref_name }}-${{ matrix.target }}.tar.gz
+            artifact_name: dirnutek-${{ github.ref_name }}-aarch64-apple-darwin.tar.gz
             archive_command: tar -czvf
           # Windows
           - target: x86_64-pc-windows-msvc
             os: windows-latest
-            artifact_name: dirnutek-${{ github.ref_name }}-${{ matrix.target }}.zip
+            artifact_name: dirnutek-${{ github.ref_name }}-x86_64-pc-windows-msvc.zip
             archive_command: zip -r
 
     steps:
